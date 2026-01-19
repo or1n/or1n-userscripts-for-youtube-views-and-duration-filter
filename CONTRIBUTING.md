@@ -181,6 +181,7 @@ If applicable, add before/after screenshots
 ## Reporting Bugs
 
 **Include:**
+
 1. Browser and version
 2. Userscript manager and version
 3. Steps to reproduce
@@ -189,6 +190,7 @@ If applicable, add before/after screenshots
 6. Screenshot if visual issue
 
 **Example:**
+
 ```text
 Browser: Chrome 120
 Manager: Violentmonkey 9.15
@@ -210,11 +212,13 @@ Console errors: None
 ## Feature Requests
 
 **Before requesting:**
+
 1. Check existing issues
 2. Ensure it fits the scope (YouTube filtering)
 3. Think about implementation
 
 **Include:**
+
 1. Use case (why you need it)
 2. Expected behavior
 3. Example configurations

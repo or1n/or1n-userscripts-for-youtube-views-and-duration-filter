@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.8
+// @version      3.0.9
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -220,14 +220,23 @@
             'ytd-video-renderer',
             'ytd-grid-video-renderer',
             'ytd-compact-video-renderer',
-            'ytd-playlist-video-renderer'
+            'ytd-playlist-video-renderer',
+            'ytd-reel-item-renderer',  // YouTube Shorts
+            'ytd-rich-grid-media',     // Grid layout
+            'ytd-rich-shelf-renderer'  // Shelf items
         ];
 
+        log('🔍 Looking for container to remove from element:', element.tagName);
+        
         for (const selector of containerSelectors) {
             const container = element.closest(selector);
-            if (container) return container;
+            if (container) {
+                log('✅ Found container:', selector);
+                return container;
+            }
         }
 
+        log('⚠️ No matching container found, using element itself:', element.tagName);
         return element;
     };
 
@@ -236,6 +245,8 @@
      */
     const removeVideoElement = (element) => {
         const container = getContainerToRemove(element);
+        
+        log('🗑️ Attempting to remove container:', container.tagName, 'ID:', container.id);
         
         if (CONFIG.SMOOTH_REMOVAL) {
             container.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out, max-height 0.3s ease-out';
@@ -249,11 +260,13 @@
                 container.style.padding = '0';
                 
                 setTimeout(() => {
+                    log('✅ Container removed from DOM');
                     container.remove();
                 }, 300);
             }, 300);
         } else {
             container.remove();
+            log('✅ Container removed from DOM (instant)');
         }
 
         state.filteredCount++;

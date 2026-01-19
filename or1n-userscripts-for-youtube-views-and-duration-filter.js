@@ -2270,8 +2270,20 @@
         bulkTextarea.style.width = '100%';
         bulkTextarea.style.height = '80px';
         const bulkModeLabel = document.createElement('label');
-        bulkModeLabel.innerHTML = '<input type="radio" name="bulk-mode" value="whitelist" checked> Add to Whitelist &nbsp; ' +
-            '<input type="radio" name="bulk-mode" value="blacklist"> Add to Blacklist';
+        // Create radio buttons using DOM methods to avoid Trusted Types violation
+        const whitelistRadio = document.createElement('input');
+        whitelistRadio.type = 'radio';
+        whitelistRadio.name = 'bulk-mode';
+        whitelistRadio.value = 'whitelist';
+        whitelistRadio.checked = true;
+        const blacklistRadio = document.createElement('input');
+        blacklistRadio.type = 'radio';
+        blacklistRadio.name = 'bulk-mode';
+        blacklistRadio.value = 'blacklist';
+        bulkModeLabel.appendChild(whitelistRadio);
+        bulkModeLabel.appendChild(document.createTextNode(' Add to Whitelist   '));
+        bulkModeLabel.appendChild(blacklistRadio);
+        bulkModeLabel.appendChild(document.createTextNode(' Add to Blacklist'));
         const bulkImportBtn = document.createElement('button');
         bulkImportBtn.textContent = '📥 Import Channels';
         bulkImportBtn.addEventListener('click', () => {

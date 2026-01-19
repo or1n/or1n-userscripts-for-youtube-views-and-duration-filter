@@ -102,7 +102,9 @@
         MAX_UNDO_HISTORY: 10,
         YOUTUBE_SHORTCUTS: ['k', 'j', 'l', 'f', 'm', 'c', 'i', 't', 'p', 'y'],
         NOTIFICATION_FADE_DELAY_MS: 10,
-        MAX_BATCH_SIZE: 25
+        MAX_BATCH_SIZE: 50,
+        // Arabic-Indic digit mapping for parseViewCount
+        ARABIC_DIGIT_MAP: {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'}
     };
 
     // Cached selectors for performance
@@ -224,8 +226,7 @@
                 .toLowerCase();
 
             // Map Arabic-Indic digits to Western
-            const arabicMap = {'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
-            s = s.replace(/[٠-٩]/g, d => arabicMap[d] || d);
+            s = s.replace(/[٠-٩]/g, d => CONSTANTS.ARABIC_DIGIT_MAP[d] || d);
 
             // Indian numbering (lakh/crore)
             if (/crore/.test(s)) {
@@ -1200,35 +1201,43 @@
             }}
         ];
         
-        // Get current channel for whitelist/blacklist options
-        const root = document.body || document.documentElement;
-        if (root) {
-            const currentVideo = root.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
-            if (currentVideo) {
-                const channelInfo = extractChannelInfo(currentVideo);
-                if (channelInfo) {
-                    menuItems.push(
-                        { text: `✅ Whitelist "${channelInfo.name.substring(0, 20)}"`, action: () => {
-                            if (!listContains(CONFIG.WHITELIST, channelInfo.id)) {
-                                CONFIG.WHITELIST.push(channelInfo.id);
-                                updateConfig({ WHITELIST: CONFIG.WHITELIST });
-                                showNotification(`✅ Whitelisted: ${channelInfo.name}`, 2000);
-                            } else {
-                                showNotification(`Already whitelisted`, 1500);
-                            }
-                        }},
-                        { text: `🚫 Blacklist "${channelInfo.name.substring(0, 20)}"`, action: () => {
-                            if (!listContains(CONFIG.BLACKLIST, channelInfo.id)) {
-                                CONFIG.BLACKLIST.push(channelInfo.id);
-                                updateConfig({ BLACKLIST: CONFIG.BLACKLIST });
-                                showNotification(`🚫 Blacklisted: ${channelInfo.name}`, 2000);
-                            } else {
-                                showNotification(`Already blacklisted`, 1500);
-                            }
-                        }}
-                    );
+        // Cache channel detection for performance (avoid multiple DOM queries)
+        let cachedChannelInfo = null;
+        try {
+            const root = document.body || document.documentElement;
+            if (root) {
+                const currentVideo = root.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
+                if (currentVideo) {
+                    cachedChannelInfo = extractChannelInfo(currentVideo);
                 }
             }
+        } catch (e) {
+            log('⚠️ Error caching channel info:', e);
+        }
+        
+        // Add whitelist/blacklist options if channel found
+        if (cachedChannelInfo) {
+            const channelInfo = cachedChannelInfo;
+            menuItems.push(
+                { text: `✅ Whitelist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                    if (!listContains(CONFIG.WHITELIST, channelInfo.id)) {
+                        CONFIG.WHITELIST.push(channelInfo.id);
+                        updateConfig({ WHITELIST: CONFIG.WHITELIST });
+                        showNotification(`✅ Whitelisted: ${channelInfo.name}`, 2000);
+                    } else {
+                        showNotification(`Already whitelisted`, 1500);
+                    }
+                }},
+                { text: `🚫 Blacklist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                    if (!listContains(CONFIG.BLACKLIST, channelInfo.id)) {
+                        CONFIG.BLACKLIST.push(channelInfo.id);
+                        updateConfig({ BLACKLIST: CONFIG.BLACKLIST });
+                        showNotification(`🚫 Blacklisted: ${channelInfo.name}`, 2000);
+                    } else {
+                        showNotification(`Already blacklisted`, 1500);
+                    }
+                }}
+            );
         }
         
         return menuItems;
@@ -2409,10 +2418,8 @@
                 CONFIG.COUNTER_PULSE_DURATION_MS = pulseDur;
                 CONFIG.COUNTER_PULSE_SCALE = pulseScale;
                 CONFIG.OPEN_COUNTER_ON_LOAD = document.querySelector('#setting-open-on-load')?.checked || false;
-                {
-                    const dsEl = document.querySelector('#setting-detailed-stats');
-                    if (dsEl) CONFIG.ENABLE_DETAILED_STATS = dsEl.checked;
-                }
+                // Detailed stats setting with proper default handling
+                CONFIG.ENABLE_DETAILED_STATS = document.querySelector('#setting-detailed-stats')?.checked || false;
                 CONFIG.ENABLE_PERFORMANCE_METRICS = document.querySelector('#setting-perf-metrics')?.checked || false;
 
                 saveConfig(CONFIG);

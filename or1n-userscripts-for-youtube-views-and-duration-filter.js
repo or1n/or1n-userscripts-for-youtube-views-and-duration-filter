@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.4
+// @version      3.0.5
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -186,11 +186,6 @@
      * Check if video should be filtered
      */
     const shouldFilterVideo = (element) => {
-        // Skip if already processed
-        if (state.processedVideos.has(element)) {
-            return false;
-        }
-
         log('🔍 shouldFilterVideo called for element:', element.tagName);
         const { viewsText, durationText } = extractVideoData(element);
         log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
@@ -297,6 +292,7 @@
                 state.processedVideos.add(video);
                 processed++;
                 
+                log('Processing video element:', video.tagName);
                 if (shouldFilterVideo(video)) {
                     removeVideoElement(video);
                 }

@@ -73,6 +73,28 @@
         ENABLE_WHITELIST: false, // Apply whitelist rules
         ENABLE_BLACKLIST: false, // Apply blacklist rules
         CASE_INSENSITIVE_LISTS: true, // Ignore case when matching whitelist/blacklist entries
+    };
+
+    // Video element selectors
+    const VIDEO_SELECTORS = [
+        'ytd-rich-item-renderer',
+        'ytd-video-renderer',
+        'ytd-grid-video-renderer',
+        'ytd-compact-video-renderer',
+        'ytd-playlist-video-renderer',
+        'ytd-rich-grid-media',
+        'yt-lockup-view-model',
+        'ytd-lockup-view-model',
+        'ytd-reel-item-renderer', // YouTube Shorts
+        'ytd-shorts-grid-renderer',
+        'ytd-reel-shelf-renderer',
+        'ytd-rich-section-renderer'
+    ];
+
+    // Constants for magic numbers
+    const CONSTANTS = {
+        CONFIRM_AUTO_DISMISS_MS: 6000,
+        INIT_RETRY_DELAY_MS: 100,
         NAVIGATION_FILTER_DELAY_MS: 500,
         SCROLL_FILTER_DELAY_MS: 300,
         COUNTER_FADE_DURATION_MS: 300,
@@ -603,7 +625,7 @@
                 whitelistHistory: state.whitelistHistory,
                 blacklistHistory: state.blacklistHistory,
                 exportedAt: new Date().toISOString(),
-                scriptVersion: '3.4.1'
+                scriptVersion: '4.0.1'
             };
             const json = JSON.stringify(exportData, null, 2);
             // Copy to clipboard
@@ -668,7 +690,7 @@
             const versionMatch = metaText.match(/@version\s+([\d.]+)/);
             if (versionMatch) {
                 const remoteVersion = versionMatch[1];
-                const currentVersion = '3.4.1';
+                const currentVersion = '4.0.1';
                 if (remoteVersion > currentVersion) {
                     showNotification(`🔄 Update available: v${remoteVersion}`, 5000);
                     log(`✓ Update available: ${currentVersion} → ${remoteVersion}`);
@@ -912,10 +934,10 @@
             'ytd-grid-video-renderer',
             'ytd-compact-video-renderer',
             'ytd-playlist-video-renderer',
-            'ytd-reel-item-renderer',  // YouTube Shorts
-            'ytd-rich-grid-media',     // Grid layout
+            'ytd-reel-item-renderer', // YouTube Shorts
+            'ytd-rich-grid-media', // Grid layout
             'ytd-rich-shelf-renderer', // Shelf items
-            'yt-lockup-view-model'     // New 2025 lockup cards
+            'yt-lockup-view-model' // New 2025 lockup cards
         ];
 
         log('🔍 Looking for container to remove from element:', element.tagName);
@@ -1665,9 +1687,9 @@
             input.type = inputType;
             input.id = id;
             input.value = value;
-            if (min) input.min = min;
-            if (max) input.max = max;
-            if (step) input.step = step;
+            if (min !== undefined && min !== null) input.min = min;
+            if (max !== undefined && max !== null) input.max = max;
+            if (step !== undefined && step !== null) input.step = step;
             item.appendChild(input);
             return item;
         };
@@ -2195,6 +2217,17 @@
 
         // ========== FEATURE 4: Advanced Stats Section ==========
         const advancedStatsSection = createSection('📊 Advanced Statistics');
+        const detailedStatsToggle = document.createElement('div');
+        detailedStatsToggle.className = 'setting-item';
+        const detailedStatsCb = document.createElement('input');
+        detailedStatsCb.type = 'checkbox';
+        detailedStatsCb.id = 'setting-detailed-stats';
+        detailedStatsCb.checked = CONFIG.ENABLE_DETAILED_STATS;
+        const detailedStatsLbl = document.createElement('label');
+        detailedStatsLbl.appendChild(detailedStatsCb);
+        detailedStatsLbl.appendChild(document.createTextNode(' Enable Detailed Stats'));
+        detailedStatsToggle.appendChild(detailedStatsLbl);
+        advancedStatsSection.appendChild(detailedStatsToggle);
         const showStatsBtn = document.createElement('button');
         showStatsBtn.textContent = '📈 View Detailed Stats';
         showStatsBtn.addEventListener('click', () => {
@@ -2408,7 +2441,10 @@
                 CONFIG.COUNTER_PULSE_DURATION_MS = pulseDur;
                 CONFIG.COUNTER_PULSE_SCALE = pulseScale;
                 CONFIG.OPEN_COUNTER_ON_LOAD = document.querySelector('#setting-open-on-load')?.checked || false;
-                CONFIG.ENABLE_DETAILED_STATS = document.querySelector('#setting-detailed-stats')?.checked || true;
+                {
+                    const dsEl = document.querySelector('#setting-detailed-stats');
+                    if (dsEl) CONFIG.ENABLE_DETAILED_STATS = dsEl.checked;
+                }
                 CONFIG.ENABLE_PERFORMANCE_METRICS = document.querySelector('#setting-perf-metrics')?.checked || false;
 
                 saveConfig(CONFIG);
@@ -3131,7 +3167,7 @@
             return;
         }
 
-        log('Initializing or1n YouTube Filter v3.4.1...');
+        log('Initializing or1n YouTube Filter v4.0.1...');
 
         // Inject styles immediately
         injectStyles();

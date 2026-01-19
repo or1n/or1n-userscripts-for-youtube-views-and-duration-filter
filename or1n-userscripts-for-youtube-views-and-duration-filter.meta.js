@@ -15,9 +15,6 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
-// @compatible   chrome
-// @compatible   firefox
-// @compatible   edge
 // @noframes
 // @run-at       document-start
 // ==/UserScript==

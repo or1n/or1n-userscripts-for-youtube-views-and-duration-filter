@@ -15,9 +15,6 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
-// @compatible   chrome
-// @compatible   firefox
-// @compatible   edge
 // @noframes
 // @run-at       document-start
 // ==/UserScript==
@@ -28,64 +25,64 @@
     // ==================== DEFAULT CONFIGURATION ====================
     const DEFAULT_CONFIG = {
         // Filter Thresholds
-        MIN_VIEWS: 99999,                    // Minimum view count required - videos below this are filtered
-        MIN_DURATION_SECONDS: 240,           // Minimum duration in seconds (240s = 4min) - shorter videos are filtered
+        MIN_VIEWS: 99999, // Minimum view count required - videos below this are filtered
+        MIN_DURATION_SECONDS: 240, // Minimum duration in seconds (240s = 4min) - shorter videos are filtered
         
         // Performance
-        DEBOUNCE_DELAY: 30,                 // Milliseconds to wait before processing mutations (lower = faster but more CPU)
+        DEBOUNCE_DELAY: 30, // Milliseconds to wait before processing mutations (lower = faster but more CPU)
         
         // Debugging
-        DEBUG: false,                        // Enable console logging for troubleshooting
+        DEBUG: false, // Enable console logging for troubleshooting
         
         // Animations & Effects
-        SMOOTH_REMOVAL: false,                // Animate video removal with fade/scale effects
-        REMOVAL_DURATION_MS: 300,            // How long removal animation takes in milliseconds
-        REMOVAL_SCALE: 0.95,                 // Scale factor during removal (0.95 = shrink to 95%)
+        SMOOTH_REMOVAL: false, // Animate video removal with fade/scale effects
+        REMOVAL_DURATION_MS: 300, // How long removal animation takes in milliseconds
+        REMOVAL_SCALE: 0.95, // Scale factor during removal (0.95 = shrink to 95%)
         
         // Counter UI
-        SHOW_COUNTER: true,                  // Display the floating statistics counter
-        OPEN_COUNTER_ON_LOAD: false,          // Open counter on load; if false, start hidden until toggled
-        COUNTER_DRAGGABLE: true,             // Allow dragging the counter to reposition it
-        COUNTER_OPACITY: 95,                 // Counter transparency (0-100, higher = more opaque)
-        COUNTER_PULSE_DURATION_MS: 200,      // Duration of counter pulse animation when stats update
-        COUNTER_PULSE_SCALE: 1.3,            // Scale multiplier for pulse effect (1.3 = grow 30%)
+        SHOW_COUNTER: true, // Display the floating statistics counter
+        OPEN_COUNTER_ON_LOAD: false, // Open counter on load; if false, start hidden until toggled
+        COUNTER_DRAGGABLE: true, // Allow dragging the counter to reposition it
+        COUNTER_OPACITY: 95, // Counter transparency (0-100, higher = more opaque)
+        COUNTER_PULSE_DURATION_MS: 200, // Duration of counter pulse animation when stats update
+        COUNTER_PULSE_SCALE: 1.3, // Scale multiplier for pulse effect (1.3 = grow 30%)
         
         // Theme & Appearance
-        THEME: 'dark',                       // Color scheme: 'dark' or 'light'
-        FONT_FAMILY: 'Segoe UI',             // Font for counter and UI elements
-        FONT_SIZE: 14,                       // Base font size in pixels
-        FONT_WEIGHT: 'normal',               // Font weight: 'normal', 'bold', 'lighter', '600'
+        THEME: 'dark', // Color scheme: 'dark' or 'light'
+        FONT_FAMILY: 'Segoe UI', // Font for counter and UI elements
+        FONT_SIZE: 14, // Base font size in pixels
+        FONT_WEIGHT: 'normal', // Font weight: 'normal', 'bold', 'lighter', '600'
         
         // Keyboard Shortcut
-        KEYBOARD_SHORTCUT: 'KeyF',           // Key to toggle counter (KeyF = F key)
-        USE_CTRL: true,                      // Require Ctrl modifier for shortcut
-        USE_ALT: false,                      // Require Alt modifier for shortcut
-        USE_SHIFT: false,                    // Require Shift modifier for shortcut
+        KEYBOARD_SHORTCUT: 'KeyF', // Key to toggle counter (KeyF = F key)
+        USE_CTRL: true, // Require Ctrl modifier for shortcut
+        USE_ALT: false, // Require Alt modifier for shortcut
+        USE_SHIFT: false, // Require Shift modifier for shortcut
         
         // Statistics
-        ENABLE_STATISTICS: true,             // Track lifetime filtering stats across sessions
+        ENABLE_STATISTICS: true, // Track lifetime filtering stats across sessions
         
         // Notifications
-        SHOW_NOTIFICATIONS: true,            // Display toast notifications for actions
-        NOTIFICATION_DURATION_MS: 3000,      // How long notifications stay visible in milliseconds
-        NOTIFICATION_FADE_MS: 300,           // Notification fade-in/out animation duration
+        SHOW_NOTIFICATIONS: true, // Display toast notifications for actions
+        NOTIFICATION_DURATION_MS: 3000, // How long notifications stay visible in milliseconds
+        NOTIFICATION_FADE_MS: 300, // Notification fade-in/out animation duration
         
         // Channel Lists
-        WHITELIST: [],                       // Channels to never filter (array of channel IDs/names)
-        BLACKLIST: [],                       // Channels to always filter (array of channel IDs/names)
-        ENABLE_WHITELIST: false,              // Apply whitelist rules
-        ENABLE_BLACKLIST: false,              // Apply blacklist rules
-        CASE_INSENSITIVE_LISTS: true,        // Ignore case when matching whitelist/blacklist entries
+        WHITELIST: [], // Channels to never filter (array of channel IDs/names)
+        BLACKLIST: [], // Channels to always filter (array of channel IDs/names)
+        ENABLE_WHITELIST: false, // Apply whitelist rules
+        ENABLE_BLACKLIST: false, // Apply blacklist rules
+        CASE_INSENSITIVE_LISTS: true, // Ignore case when matching whitelist/blacklist entries
         
         // Filter Logic
-        FILTER_MODE: 'OR',                   // 'AND': both criteria must fail to filter | 'OR': either criterion can trigger filter
-        SKIP_LIVE_STREAMS: true,             // Do not filter videos currently streaming live
-        FILTER_ALL_LIVE_STREAMS: false,      // Hide ALL live streams regardless of views/duration (overrides SKIP_LIVE_STREAMS)
-        FILTER_ALL_SHORTS: false,             // Hide ALL YouTube Shorts regardless of views/duration
+        FILTER_MODE: 'OR', // 'AND': both criteria must fail to filter | 'OR': either criterion can trigger filter
+        SKIP_LIVE_STREAMS: true, // Do not filter videos currently streaming live
+        FILTER_ALL_LIVE_STREAMS: false, // Hide ALL live streams regardless of views/duration (overrides SKIP_LIVE_STREAMS)
+        FILTER_ALL_SHORTS: false, // Hide ALL YouTube Shorts regardless of views/duration
         
         // Advanced Features
-        ENABLE_DETAILED_STATS: true,         // Track filter reasons, channels, dates
-        ENABLE_PERFORMANCE_METRICS: false    // Track DOM query timing and batch processing stats
+        ENABLE_DETAILED_STATS: true, // Track filter reasons, channels, dates
+        ENABLE_PERFORMANCE_METRICS: false // Track DOM query timing and batch processing stats
     };
 
     const VIDEO_SELECTORS = [

@@ -25,8 +25,14 @@
     // ==================== DEFAULT CONFIGURATION ====================
     const DEFAULT_CONFIG = {
         // Filter Thresholds
-        MIN_VIEWS: 99999, // Minimum view count required - videos below this are filtered
-        MIN_DURATION_SECONDS: 240, // Minimum duration in seconds (240s = 4min) - shorter videos are filtered
+        MIN_VIEWS: 0, // Minimum view count required - videos below this are filtered (0 = disabled)
+        MIN_DURATION_SECONDS: 0, // Minimum duration in seconds (0 = disabled)
+        FILTER_MODE: 'OR', // Combine filters with 'AND' or 'OR' logic
+        
+        // Special Filters
+        FILTER_ALL_SHORTS: false, // Filter ALL YouTube Shorts regardless of other settings
+        FILTER_ALL_LIVE_STREAMS: false, // Filter ALL live streams regardless of other settings
+        SKIP_LIVE_STREAMS: false, // Never filter live streams (opposite of FILTER_ALL_LIVE_STREAMS)
         
         // Performance
         DEBOUNCE_DELAY: 30, // Milliseconds to wait before processing mutations (lower = faster but more CPU)
@@ -61,6 +67,8 @@
         
         // Statistics
         ENABLE_STATISTICS: true, // Track lifetime filtering stats across sessions
+        ENABLE_DETAILED_STATS: false, // Track detailed filtering reasons and channel stats
+        ENABLE_PERFORMANCE_METRICS: false, // Track performance metrics for optimization
         
         // Notifications
         SHOW_NOTIFICATIONS: true, // Display toast notifications for actions

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.7
+// @version      3.0.8
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -80,18 +80,19 @@
     
     /**
      * Parse view count strings with K/M/B multipliers
-     * Examples: "1.2K" -> 1200, "5M" -> 5000000
+     * Examples: "1.2K views" -> 1200, "5M views" -> 5000000
      */
     const parseViewCount = (text) => {
         if (!text) return 0;
         
         // MUST contain "view" or "views" keyword - more strict matching
-        // This prevents matching numbers from video titles like "RTX 5090" or "17 years"
-        const viewMatch = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?\s*(?:view|views|visualizações|просмотров)/i);
+        // Match the LAST number+multiplier before "views" to avoid episode numbers, etc.
+        // This prevents matching numbers from video titles like "Episode 353" or "3:17"
+        const viewMatch = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?\s*(?:view|views|visualizações|просмотров)(?!\w)/i);
         if (!viewMatch) return 0;
 
         let [, count, multiplier] = viewMatch;
-        count = parseFloat(count.replace(/[.,]/g, match => match === ',' ? '.' : ''));
+        count = parseFloat(count.replace(/,/g, ''));
 
         const multipliers = {
             'K': 1e3, 'k': 1e3, 'T': 1e3, 'т': 1e3,

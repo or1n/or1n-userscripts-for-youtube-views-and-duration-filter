@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.5
+// @version      3.0.7
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -85,14 +85,12 @@
     const parseViewCount = (text) => {
         if (!text) return 0;
         
-        // Remove common text patterns
-        text = text.replace(/views?|visualizações|просмотров?/gi, '').trim();
-        
-        // Match number patterns with optional multipliers
-        const match = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?/);
-        if (!match) return 0;
+        // MUST contain "view" or "views" keyword - more strict matching
+        // This prevents matching numbers from video titles like "RTX 5090" or "17 years"
+        const viewMatch = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?\s*(?:view|views|visualizações|просмотров)/i);
+        if (!viewMatch) return 0;
 
-        let [, count, multiplier] = match;
+        let [, count, multiplier] = viewMatch;
         count = parseFloat(count.replace(/[.,]/g, match => match === ',' ? '.' : ''));
 
         const multipliers = {
@@ -522,213 +520,303 @@
     // ==================== SETTINGS PANEL ====================
 
     /**
-     * Create settings panel
+     * Create settings panel (Trusted Types compliant - no innerHTML)
      */
     const createSettingsPanel = () => {
         const panel = document.createElement('div');
         panel.id = 'yt-filter-settings-panel';
+        panel.className = 'visible';
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'settings-overlay';
+        overlay.id = 'settings-overlay';
+
+        // Create content container
+        const content = document.createElement('div');
+        content.className = 'settings-content';
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'settings-header';
+        const title = document.createElement('h2');
+        title.textContent = '⚙️ YouTube Filter Pro Settings';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'settings-close';
+        closeBtn.title = 'Close';
+        closeBtn.textContent = '✕';
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        // Body container
+        const body = document.createElement('div');
+        body.className = 'settings-body';
+
+        // Helper to create a section
+        const createSection = (title) => {
+            const section = document.createElement('div');
+            section.className = 'settings-section';
+            const h3 = document.createElement('h3');
+            h3.textContent = title;
+            section.appendChild(h3);
+            return section;
+        };
+
+        // Helper to create input row
+        const createInputRow = (label, inputType, id, value, min, max, step) => {
+            const item = document.createElement('div');
+            item.className = 'setting-item';
+            const lbl = document.createElement('label');
+            lbl.textContent = label;
+            item.appendChild(lbl);
+            const input = document.createElement('input');
+            input.type = inputType;
+            input.id = id;
+            input.value = value;
+            if (min) input.min = min;
+            if (max) input.max = max;
+            if (step) input.step = step;
+            item.appendChild(input);
+            return item;
+        };
+
+        // === FILTER SETTINGS ===
+        const filterSection = createSection('🎯 Filter Settings');
+        filterSection.appendChild(createInputRow('Minimum Views', 'number', 'setting-min-views', CONFIG.MIN_VIEWS, 0, null, 1000));
+        filterSection.appendChild(createInputRow('Minimum Duration (seconds)', 'number', 'setting-min-duration', CONFIG.MIN_DURATION_SECONDS, 0, null, 30));
+        body.appendChild(filterSection);
+
+        // === APPEARANCE ===
+        const appearanceSection = createSection('🎨 Appearance');
         
-        // Use template element to avoid Trusted Types violation
-        const template = document.createElement('template');
-        template.innerHTML = `
-            <div class="settings-overlay" id="settings-overlay"></div>
-            <div class="settings-content">
-                <div class="settings-header">
-                    <h2>⚙️ YouTube Filter Pro Settings</h2>
-                    <button class="settings-close" title="Close">✕</button>
-                </div>
-                <div class="settings-body">
-                    <div class="settings-section">
-                        <h3>🎯 Filter Settings</h3>
-                        <div class="setting-item">
-                            <label>Minimum Views</label>
-                            <input type="number" id="setting-min-views" value="${CONFIG.MIN_VIEWS}" min="0" step="1000">
-                        </div>
-                        <div class="setting-item">
-                            <label>Minimum Duration (seconds)</label>
-                            <input type="number" id="setting-min-duration" value="${CONFIG.MIN_DURATION_SECONDS}" min="0" step="30">
-                            <small>${Math.floor(CONFIG.MIN_DURATION_SECONDS / 60)}m ${CONFIG.MIN_DURATION_SECONDS % 60}s</small>
-                        </div>
-                    </div>
+        // Theme select
+        const themeItem = document.createElement('div');
+        themeItem.className = 'setting-item';
+        const themeLbl = document.createElement('label');
+        themeLbl.textContent = 'Theme';
+        const themeSelect = document.createElement('select');
+        themeSelect.id = 'setting-theme';
+        ['dark', 'light'].forEach(val => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val === 'dark' ? '🌙 Dark' : '☀️ Light';
+            opt.selected = CONFIG.THEME === val;
+            themeSelect.appendChild(opt);
+        });
+        themeItem.appendChild(themeLbl);
+        themeItem.appendChild(themeSelect);
+        appearanceSection.appendChild(themeItem);
 
-                    <div class="settings-section">
-                        <h3>🎨 Appearance</h3>
-                        <div class="setting-item">
-                            <label>Theme</label>
-                            <select id="setting-theme">
-                                <option value="dark" ${CONFIG.THEME === 'dark' ? 'selected' : ''}>🌙 Dark</option>
-                                <option value="light" ${CONFIG.THEME === 'light' ? 'selected' : ''}>☀️ Light</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>Font Family</label>
-                            <select id="setting-font-family">
-                                <option value="Segoe UI" ${CONFIG.FONT_FAMILY === 'Segoe UI' ? 'selected' : ''}>Segoe UI</option>
-                                <option value="Arial" ${CONFIG.FONT_FAMILY === 'Arial' ? 'selected' : ''}>Arial</option>
-                                <option value="Roboto" ${CONFIG.FONT_FAMILY === 'Roboto' ? 'selected' : ''}>Roboto</option>
-                                <option value="Consolas" ${CONFIG.FONT_FAMILY === 'Consolas' ? 'selected' : ''}>Consolas</option>
-                                <option value="Courier New" ${CONFIG.FONT_FAMILY === 'Courier New' ? 'selected' : ''}>Courier New</option>
-                                <option value="Georgia" ${CONFIG.FONT_FAMILY === 'Georgia' ? 'selected' : ''}>Georgia</option>
-                                <option value="Verdana" ${CONFIG.FONT_FAMILY === 'Verdana' ? 'selected' : ''}>Verdana</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>Font Size</label>
-                            <input type="range" id="setting-font-size" min="10" max="20" value="${CONFIG.FONT_SIZE}">
-                            <span id="font-size-value">${CONFIG.FONT_SIZE}px</span>
-                        </div>
-                        <div class="setting-item">
-                            <label>Font Weight</label>
-                            <select id="setting-font-weight">
-                                <option value="normal" ${CONFIG.FONT_WEIGHT === 'normal' ? 'selected' : ''}>Normal</option>
-                                <option value="bold" ${CONFIG.FONT_WEIGHT === 'bold' ? 'selected' : ''}>Bold</option>
-                                <option value="lighter" ${CONFIG.FONT_WEIGHT === 'lighter' ? 'selected' : ''}>Light</option>
-                                <option value="600" ${CONFIG.FONT_WEIGHT === '600' ? 'selected' : ''}>Semi-Bold</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>Counter Opacity</label>
-                            <input type="range" id="setting-opacity" min="50" max="100" value="${CONFIG.COUNTER_OPACITY}">
-                            <span id="opacity-value">${CONFIG.COUNTER_OPACITY}%</span>
-                        </div>
-                    </div>
+        // Font family select
+        const fontItem = document.createElement('div');
+        fontItem.className = 'setting-item';
+        const fontLbl = document.createElement('label');
+        fontLbl.textContent = 'Font Family';
+        const fontSelect = document.createElement('select');
+        fontSelect.id = 'setting-font-family';
+        ['Segoe UI', 'Arial', 'Roboto', 'Consolas', 'Courier New', 'Georgia', 'Verdana'].forEach(font => {
+            const opt = document.createElement('option');
+            opt.value = font;
+            opt.textContent = font;
+            opt.selected = CONFIG.FONT_FAMILY === font;
+            fontSelect.appendChild(opt);
+        });
+        fontItem.appendChild(fontLbl);
+        fontItem.appendChild(fontSelect);
+        appearanceSection.appendChild(fontItem);
 
-                    <div class="settings-section">
-                        <h3>⌨️ Keyboard Shortcut</h3>
-                        <div class="setting-item">
-                            <label>Toggle Counter Visibility</label>
-                            <div class="keyboard-shortcut">
-                                <label><input type="checkbox" id="shortcut-ctrl" ${CONFIG.USE_CTRL ? 'checked' : ''}> Ctrl</label>
-                                <label><input type="checkbox" id="shortcut-alt" ${CONFIG.USE_ALT ? 'checked' : ''}> Alt</label>
-                                <label><input type="checkbox" id="shortcut-shift" ${CONFIG.USE_SHIFT ? 'checked' : ''}> Shift</label>
-                                <span>+</span>
-                                <select id="shortcut-key">
-                                    <option value="KeyF" ${CONFIG.KEYBOARD_SHORTCUT === 'KeyF' ? 'selected' : ''}>F</option>
-                                    <option value="KeyH" ${CONFIG.KEYBOARD_SHORTCUT === 'KeyH' ? 'selected' : ''}>H</option>
-                                    <option value="KeyY" ${CONFIG.KEYBOARD_SHORTCUT === 'KeyY' ? 'selected' : ''}>Y</option>
-                                    <option value="KeyQ" ${CONFIG.KEYBOARD_SHORTCUT === 'KeyQ' ? 'selected' : ''}>Q</option>
-                                </select>
-                            </div>
-                            <small>Current: ${CONFIG.USE_CTRL ? 'Ctrl+' : ''}${CONFIG.USE_ALT ? 'Alt+' : ''}${CONFIG.USE_SHIFT ? 'Shift+' : ''}${CONFIG.KEYBOARD_SHORTCUT.replace('Key', '')}</small>
-                        </div>
-                    </div>
-
-                    <div class="settings-section">
-                        <h3>📊 Statistics</h3>
-                        <div class="setting-item">
-                            <label><input type="checkbox" id="setting-enable-stats" ${CONFIG.ENABLE_STATISTICS ? 'checked' : ''}> Track Lifetime Statistics</label>
-                        </div>
-                        <div class="setting-item">
-                            <label><input type="checkbox" id="setting-show-notifications" ${CONFIG.SHOW_NOTIFICATIONS ? 'checked' : ''}> Show Notifications</label>
-                        </div>
-                        <div class="stats-display">
-                            <p><strong>Total Filtered:</strong> ${state.lifetimeStats.totalFiltered.toLocaleString()}</p>
-                            <p><strong>Active Since:</strong> ${new Date(state.lifetimeStats.firstInstall).toLocaleDateString()}</p>
-                            <p><strong>Days Active:</strong> ${Math.floor((Date.now() - state.lifetimeStats.firstInstall) / (1000 * 60 * 60 * 24))}</p>
-                            <button class="btn-reset-stats">Reset Statistics</button>
-                        </div>
-                    </div>
-
-                    <div class="settings-section">
-                        <h3>🔧 Advanced</h3>
-                        <div class="setting-item">
-                            <label><input type="checkbox" id="setting-smooth-removal" ${CONFIG.SMOOTH_REMOVAL ? 'checked' : ''}> Smooth Video Removal Animation</label>
-                        </div>
-                        <div class="setting-item">
-                            <label><input type="checkbox" id="setting-draggable" ${CONFIG.COUNTER_DRAGGABLE ? 'checked' : ''}> Draggable Counter</label>
-                        </div>
-                        <div class="setting-item">
-                            <label><input type="checkbox" id="setting-debug" ${CONFIG.DEBUG ? 'checked' : ''}> Enable Debug Logging</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="settings-footer">
-                    <button class="btn-reset">Reset to Defaults</button>
-                    <button class="btn-save">Save Settings</button>
-                </div>
-            </div>
-        `;
-        
-        // Append template content to panel (Trusted Types compatible)
-        panel.appendChild(template.content.cloneNode(true));
-
-        document.body.appendChild(panel);
-        state.settingsPanel = panel;
-
-        // Event listeners
-        panel.querySelector('.settings-close').addEventListener('click', () => toggleSettingsPanel());
-        panel.querySelector('#settings-overlay').addEventListener('click', () => toggleSettingsPanel());
-        
-        // Live preview for sliders
-        const fontSizeSlider = panel.querySelector('#setting-font-size');
-        const fontSizeValue = panel.querySelector('#font-size-value');
+        // Font size slider
+        const fontSizeItem = document.createElement('div');
+        fontSizeItem.className = 'setting-item';
+        const fontSizeLbl = document.createElement('label');
+        fontSizeLbl.textContent = 'Font Size';
+        const fontSizeSlider = document.createElement('input');
+        fontSizeSlider.type = 'range';
+        fontSizeSlider.id = 'setting-font-size';
+        fontSizeSlider.min = 10;
+        fontSizeSlider.max = 20;
+        fontSizeSlider.value = CONFIG.FONT_SIZE;
+        const fontSizeValue = document.createElement('span');
+        fontSizeValue.id = 'font-size-value';
+        fontSizeValue.textContent = CONFIG.FONT_SIZE + 'px';
         fontSizeSlider.addEventListener('input', (e) => {
             fontSizeValue.textContent = e.target.value + 'px';
         });
+        fontSizeItem.appendChild(fontSizeLbl);
+        fontSizeItem.appendChild(fontSizeSlider);
+        fontSizeItem.appendChild(fontSizeValue);
+        appearanceSection.appendChild(fontSizeItem);
 
-        const opacitySlider = panel.querySelector('#setting-opacity');
-        const opacityValue = panel.querySelector('#opacity-value');
+        // Font weight select
+        const fontWeightItem = document.createElement('div');
+        fontWeightItem.className = 'setting-item';
+        const fontWeightLbl = document.createElement('label');
+        fontWeightLbl.textContent = 'Font Weight';
+        const fontWeightSelect = document.createElement('select');
+        fontWeightSelect.id = 'setting-font-weight';
+        ['normal', 'bold', 'lighter', '600'].forEach(weight => {
+            const opt = document.createElement('option');
+            opt.value = weight;
+            opt.textContent = weight === 'normal' ? 'Normal' : weight === 'bold' ? 'Bold' : weight === 'lighter' ? 'Light' : 'Semi-Bold';
+            opt.selected = CONFIG.FONT_WEIGHT === weight;
+            fontWeightSelect.appendChild(opt);
+        });
+        fontWeightItem.appendChild(fontWeightLbl);
+        fontWeightItem.appendChild(fontWeightSelect);
+        appearanceSection.appendChild(fontWeightItem);
+
+        // Opacity slider
+        const opacityItem = document.createElement('div');
+        opacityItem.className = 'setting-item';
+        const opacityLbl = document.createElement('label');
+        opacityLbl.textContent = 'Counter Opacity';
+        const opacitySlider = document.createElement('input');
+        opacitySlider.type = 'range';
+        opacitySlider.id = 'setting-opacity';
+        opacitySlider.min = 50;
+        opacitySlider.max = 100;
+        opacitySlider.value = CONFIG.COUNTER_OPACITY;
+        const opacityValue = document.createElement('span');
+        opacityValue.id = 'opacity-value';
+        opacityValue.textContent = CONFIG.COUNTER_OPACITY + '%';
         opacitySlider.addEventListener('input', (e) => {
             opacityValue.textContent = e.target.value + '%';
         });
+        opacityItem.appendChild(opacityLbl);
+        opacityItem.appendChild(opacitySlider);
+        opacityItem.appendChild(opacityValue);
+        appearanceSection.appendChild(opacityItem);
 
-        // Duration display update
-        const durationInput = panel.querySelector('#setting-min-duration');
-        durationInput.addEventListener('input', (e) => {
-            const seconds = parseInt(e.target.value) || 0;
-            const small = e.target.nextElementSibling;
-            small.textContent = `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+        body.appendChild(appearanceSection);
+
+        // === KEYBOARD SHORTCUT ===
+        const shortcutSection = createSection('⌨️ Keyboard Shortcut');
+        const shortcutItem = document.createElement('div');
+        shortcutItem.className = 'setting-item';
+        const shortcutLbl = document.createElement('label');
+        shortcutLbl.textContent = 'Toggle Counter Visibility';
+        shortcutItem.appendChild(shortcutLbl);
+        const shortcutDiv = document.createElement('div');
+        shortcutDiv.className = 'keyboard-shortcut';
+        ['ctrl', 'alt', 'shift'].forEach(modifier => {
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'shortcut-' + modifier;
+            cb.checked = CONFIG['USE_' + modifier.toUpperCase()];
+            const cbLbl = document.createElement('label');
+            cbLbl.appendChild(cb);
+            cbLbl.appendChild(document.createTextNode(' ' + modifier.charAt(0).toUpperCase() + modifier.slice(1)));
+            shortcutDiv.appendChild(cbLbl);
         });
+        shortcutDiv.appendChild(document.createTextNode(' + '));
+        const keySelect = document.createElement('select');
+        keySelect.id = 'shortcut-key';
+        ['KeyF', 'KeyH', 'KeyY', 'KeyQ'].forEach(key => {
+            const opt = document.createElement('option');
+            opt.value = key;
+            opt.textContent = key.replace('Key', '');
+            opt.selected = CONFIG.KEYBOARD_SHORTCUT === key;
+            keySelect.appendChild(opt);
+        });
+        shortcutDiv.appendChild(keySelect);
+        shortcutItem.appendChild(shortcutDiv);
+        shortcutSection.appendChild(shortcutItem);
+        body.appendChild(shortcutSection);
 
-        // Reset stats
-        panel.querySelector('.btn-reset-stats').addEventListener('click', () => {
+        // === STATISTICS ===
+        const statsSection = createSection('📊 Statistics');
+        const enableStatsItem = document.createElement('div');
+        enableStatsItem.className = 'setting-item';
+        const enableStatsCb = document.createElement('input');
+        enableStatsCb.type = 'checkbox';
+        enableStatsCb.id = 'setting-enable-stats';
+        enableStatsCb.checked = CONFIG.ENABLE_STATISTICS;
+        const enableStatsLbl = document.createElement('label');
+        enableStatsLbl.appendChild(enableStatsCb);
+        enableStatsLbl.appendChild(document.createTextNode(' Track Lifetime Statistics'));
+        enableStatsItem.appendChild(enableStatsLbl);
+        statsSection.appendChild(enableStatsItem);
+
+        const notifItem = document.createElement('div');
+        notifItem.className = 'setting-item';
+        const notifCb = document.createElement('input');
+        notifCb.type = 'checkbox';
+        notifCb.id = 'setting-show-notifications';
+        notifCb.checked = CONFIG.SHOW_NOTIFICATIONS;
+        const notifLbl = document.createElement('label');
+        notifLbl.appendChild(notifCb);
+        notifLbl.appendChild(document.createTextNode(' Show Notifications'));
+        notifItem.appendChild(notifLbl);
+        statsSection.appendChild(notifItem);
+
+        const statsDisplay = document.createElement('div');
+        statsDisplay.className = 'stats-display';
+        const daysSince = Math.floor((Date.now() - state.lifetimeStats.firstInstall) / (1000 * 60 * 60 * 24));
+        statsDisplay.appendChild(Object.assign(document.createElement('p'), { textContent: '🎬 Total Filtered: ' + state.lifetimeStats.totalFiltered.toLocaleString() }));
+        statsDisplay.appendChild(Object.assign(document.createElement('p'), { textContent: '📅 Active Since: ' + new Date(state.lifetimeStats.firstInstall).toLocaleDateString() }));
+        statsDisplay.appendChild(Object.assign(document.createElement('p'), { textContent: '⏱️ Days Active: ' + daysSince }));
+        const resetStatsBtn = document.createElement('button');
+        resetStatsBtn.className = 'btn-reset-stats';
+        resetStatsBtn.textContent = 'Reset Statistics';
+        resetStatsBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to reset all statistics? This cannot be undone.')) {
-                state.lifetimeStats = {
-                    totalFiltered: 0,
-                    firstInstall: Date.now(),
-                    lastReset: Date.now()
-                };
+                state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
                 saveStats();
                 showNotification('✓ Statistics reset successfully');
                 setTimeout(() => toggleSettingsPanel(), 500);
             }
         });
+        statsDisplay.appendChild(resetStatsBtn);
+        statsSection.appendChild(statsDisplay);
+        body.appendChild(statsSection);
 
-        // Save settings
-        panel.querySelector('.btn-save').addEventListener('click', () => {
-            CONFIG.MIN_VIEWS = parseInt(panel.querySelector('#setting-min-views').value) || 0;
-            CONFIG.MIN_DURATION_SECONDS = parseInt(panel.querySelector('#setting-min-duration').value) || 0;
-            CONFIG.THEME = panel.querySelector('#setting-theme').value;
-            CONFIG.FONT_FAMILY = panel.querySelector('#setting-font-family').value;
-            CONFIG.FONT_SIZE = parseInt(panel.querySelector('#setting-font-size').value) || 14;
-            CONFIG.FONT_WEIGHT = panel.querySelector('#setting-font-weight').value;
-            CONFIG.COUNTER_OPACITY = parseInt(panel.querySelector('#setting-opacity').value) || 95;
-            CONFIG.USE_CTRL = panel.querySelector('#shortcut-ctrl').checked;
-            CONFIG.USE_ALT = panel.querySelector('#shortcut-alt').checked;
-            CONFIG.USE_SHIFT = panel.querySelector('#shortcut-shift').checked;
-            CONFIG.KEYBOARD_SHORTCUT = panel.querySelector('#shortcut-key').value;
-            CONFIG.ENABLE_STATISTICS = panel.querySelector('#setting-enable-stats').checked;
-            CONFIG.SHOW_NOTIFICATIONS = panel.querySelector('#setting-show-notifications').checked;
-            CONFIG.SMOOTH_REMOVAL = panel.querySelector('#setting-smooth-removal').checked;
-            CONFIG.COUNTER_DRAGGABLE = panel.querySelector('#setting-draggable').checked;
-            CONFIG.DEBUG = panel.querySelector('#setting-debug').checked;
+        // === ADVANCED ===
+        const advSection = createSection('🔧 Advanced');
+        const smoothItem = document.createElement('div');
+        smoothItem.className = 'setting-item';
+        const smoothCb = document.createElement('input');
+        smoothCb.type = 'checkbox';
+        smoothCb.id = 'setting-smooth-removal';
+        smoothCb.checked = CONFIG.SMOOTH_REMOVAL;
+        const smoothLbl = document.createElement('label');
+        smoothLbl.appendChild(smoothCb);
+        smoothLbl.appendChild(document.createTextNode(' Smooth Video Removal Animation'));
+        smoothItem.appendChild(smoothLbl);
+        advSection.appendChild(smoothItem);
 
-            saveConfig(CONFIG);
-            showNotification('✓ Settings saved');
-            
-            // Recreate counter and styles
-            if (state.counterElement) {
-                state.counterElement.remove();
-                state.counterElement = null;
-            }
-            injectStyles();
-            createCounter();
-            
-            toggleSettingsPanel();
-        });
+        const dragItem = document.createElement('div');
+        dragItem.className = 'setting-item';
+        const dragCb = document.createElement('input');
+        dragCb.type = 'checkbox';
+        dragCb.id = 'setting-draggable';
+        dragCb.checked = CONFIG.COUNTER_DRAGGABLE;
+        const dragLbl = document.createElement('label');
+        dragLbl.appendChild(dragCb);
+        dragLbl.appendChild(document.createTextNode(' Draggable Counter'));
+        dragItem.appendChild(dragLbl);
+        advSection.appendChild(dragItem);
 
-        // Reset to defaults
-        panel.querySelector('.btn-reset').addEventListener('click', () => {
+        const debugItem = document.createElement('div');
+        debugItem.className = 'setting-item';
+        const debugCb = document.createElement('input');
+        debugCb.type = 'checkbox';
+        debugCb.id = 'setting-debug';
+        debugCb.checked = CONFIG.DEBUG;
+        const debugLbl = document.createElement('label');
+        debugLbl.appendChild(debugCb);
+        debugLbl.appendChild(document.createTextNode(' Enable Debug Logging'));
+        debugItem.appendChild(debugLbl);
+        advSection.appendChild(debugItem);
+
+        body.appendChild(advSection);
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.className = 'settings-footer';
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'btn-reset';
+        resetBtn.textContent = 'Reset to Defaults';
+        resetBtn.addEventListener('click', () => {
             if (confirm('Reset all settings to defaults?')) {
                 CONFIG = { ...DEFAULT_CONFIG };
                 saveConfig(CONFIG);
@@ -736,6 +824,52 @@
                 setTimeout(() => location.reload(), 500);
             }
         });
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn-save';
+        saveBtn.textContent = 'Save Settings';
+        saveBtn.addEventListener('click', () => {
+            CONFIG.MIN_VIEWS = parseInt(document.querySelector('#setting-min-views').value) || 0;
+            CONFIG.MIN_DURATION_SECONDS = parseInt(document.querySelector('#setting-min-duration').value) || 0;
+            CONFIG.THEME = document.querySelector('#setting-theme').value;
+            CONFIG.FONT_FAMILY = document.querySelector('#setting-font-family').value;
+            CONFIG.FONT_SIZE = parseInt(document.querySelector('#setting-font-size').value) || 14;
+            CONFIG.FONT_WEIGHT = document.querySelector('#setting-font-weight').value;
+            CONFIG.COUNTER_OPACITY = parseInt(document.querySelector('#setting-opacity').value) || 95;
+            CONFIG.USE_CTRL = document.querySelector('#shortcut-ctrl').checked;
+            CONFIG.USE_ALT = document.querySelector('#shortcut-alt').checked;
+            CONFIG.USE_SHIFT = document.querySelector('#shortcut-shift').checked;
+            CONFIG.KEYBOARD_SHORTCUT = document.querySelector('#shortcut-key').value;
+            CONFIG.ENABLE_STATISTICS = document.querySelector('#setting-enable-stats').checked;
+            CONFIG.SHOW_NOTIFICATIONS = document.querySelector('#setting-show-notifications').checked;
+            CONFIG.SMOOTH_REMOVAL = document.querySelector('#setting-smooth-removal').checked;
+            CONFIG.COUNTER_DRAGGABLE = document.querySelector('#setting-draggable').checked;
+            CONFIG.DEBUG = document.querySelector('#setting-debug').checked;
+
+            saveConfig(CONFIG);
+            showNotification('✓ Settings saved');
+            
+            if (state.counterElement) {
+                state.counterElement.remove();
+                state.counterElement = null;
+            }
+            injectStyles();
+            createCounter();
+            toggleSettingsPanel();
+        });
+        footer.appendChild(resetBtn);
+        footer.appendChild(saveBtn);
+
+        content.appendChild(header);
+        content.appendChild(body);
+        content.appendChild(footer);
+        panel.appendChild(overlay);
+        panel.appendChild(content);
+
+        document.body.appendChild(panel);
+        state.settingsPanel = panel;
+
+        overlay.addEventListener('click', () => toggleSettingsPanel());
+        closeBtn.addEventListener('click', () => toggleSettingsPanel());
 
         return panel;
     };

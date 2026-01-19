@@ -841,38 +841,6 @@
             return false;
         }
         
-        // Check if we should filter all shorts
-        if (CONFIG.FILTER_ALL_SHORTS) {
-            // Multiple detection strategies for Shorts:
-            // 1. Check if element is or contains a reel item renderer
-            const isReelRenderer = element.tagName.toLowerCase() === 'ytd-reel-item-renderer' || 
-                                   element.closest('ytd-reel-item-renderer') !== null;
-            
-            // 2. Check if we're on the /shorts/ page
-            const isOnShortsPage = window.location.pathname.includes('/shorts/');
-            
-            // 3. Check for shorts-specific thumbnail overlay or badges
-            const hasShortsIndicator = element.querySelector('[overlay-style="SHORTS"]') !== null ||
-                                      element.querySelector('.ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]') !== null ||
-                                      element.querySelector('ytd-thumbnail-overlay-time-status-renderer[aria-label*="Shorts"]') !== null ||
-                                      element.querySelector('[aria-label*="Short"]') !== null;
-            
-            // 4. Check if the video link contains '/shorts/'
-            const videoLink = element.querySelector('a[href*="/shorts/"]');
-            const hasShortsURL = videoLink !== null;
-            
-            const isShort = isReelRenderer || isOnShortsPage || hasShortsIndicator || hasShortsURL;
-            
-            if (isShort) {
-                log('🚫 FILTER_ALL_SHORTS enabled - filtering short (detected via: ' + 
-                    (isReelRenderer ? 'reel-renderer ' : '') +
-                    (isOnShortsPage ? 'shorts-page ' : '') +
-                    (hasShortsIndicator ? 'shorts-indicator ' : '') +
-                    (hasShortsURL ? 'shorts-url' : '') + ')');
-                return true;
-            }
-        }
-        
         log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
 
         // Skip if missing critical data
@@ -2497,20 +2465,20 @@
      */
     const toggleSettingsPanel = () => {
         try {
-        if (!state.settingsPanel) {
-            createSettingsPanel();
+            if (!state.settingsPanel) {
+                createSettingsPanel();
                 if (!state.settingsPanel) {
                     log('❌ Failed to create settings panel');
                     return;
                 }
-        }
-        
-        const isVisible = state.settingsPanel.classList.contains('visible');
-        if (isVisible) {
-            state.settingsPanel.classList.remove('visible');
-        } else {
-            state.settingsPanel.classList.add('visible');
-        }
+            }
+            
+            const isVisible = state.settingsPanel.classList.contains('visible');
+            if (isVisible) {
+                state.settingsPanel.classList.remove('visible');
+            } else {
+                state.settingsPanel.classList.add('visible');
+            }
         } catch (e) {
             log('❌ Error toggling settings panel:', e);
             showNotification('⚠️ Failed to open settings');

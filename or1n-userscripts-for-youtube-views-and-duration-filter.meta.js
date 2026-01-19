@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         or1n YouTube Filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.4.1
-// @description  Advanced YouTube video filter with smart filtering, customizable UI, and comprehensive statistics
+// @version      4.0.0
+// @description  Advanced YouTube video filter with smart filtering, customizable UI, comprehensive statistics, export/import, auto-update, history, advanced analytics, bulk import, performance metrics, accessibility
 // @author       or1n
 // @license      MIT
 // @homepage     https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter

@@ -44,6 +44,7 @@
         
         // Counter UI
         SHOW_COUNTER: true,                  // Display the floating statistics counter
+        OPEN_COUNTER_ON_LOAD: true,          // Open counter on load; if false, start hidden until toggled
         COUNTER_DRAGGABLE: true,             // Allow dragging the counter to reposition it
         COUNTER_OPACITY: 95,                 // Counter transparency (0-100, higher = more opaque)
         COUNTER_PULSE_DURATION_MS: 200,      // Duration of counter pulse animation when stats update
@@ -832,11 +833,6 @@
      */
     const createQuickMenuItems = () => {
         const menuItems = [
-            { text: '👁️ Toggle Counter', action: (stats, toggleBtn) => {
-                const isHidden = stats.style.display === 'none';
-                stats.style.display = isHidden ? 'block' : 'none';
-                toggleBtn.textContent = isHidden ? '−' : '+';
-            }},
             { text: '🚫 Close Counter', action: (stats, toggleBtn, counter) => {
                 counter.style.transition = 'opacity 0.3s ease';
                 counter.style.opacity = '0';
@@ -913,11 +909,11 @@
         };
         settingsBtn.addEventListener('click', settingsBtn._handler);
 
-        // Toggle visibility
+        // Toggle counter visibility (entire UI)
         toggleBtn._handler = (e) => {
             e.stopPropagation();
-            const isHidden = stats.style.display === 'none';
-            stats.style.display = isHidden ? 'block' : 'none';
+            const isHidden = counter.style.display === 'none';
+            counter.style.display = isHidden ? 'block' : 'none';
             toggleBtn.textContent = isHidden ? '−' : '+';
             toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
             quickMenu.style.display = 'none';
@@ -1011,6 +1007,15 @@
         }
 
         document.body.appendChild(counter);
+        // Respect open-on-load setting
+        if (!CONFIG.OPEN_COUNTER_ON_LOAD) {
+            counter.style.display = 'none';
+            const headerToggle = counter.querySelector('.yt-filter-toggle');
+            if (headerToggle) {
+                headerToggle.textContent = '+';
+                headerToggle.title = 'Show Counter';
+            }
+        }
         state.counterElement = counter;
 
         return counter;
@@ -1206,7 +1211,7 @@
         const header = document.createElement('div');
         header.className = 'settings-header';
         const title = document.createElement('h2');
-        title.textContent = '⚙️ YouTube Filter Pro Settings';
+        title.textContent = '⚙️ or1n YouTube Filter Settings';
         const closeBtn = document.createElement('button');
         closeBtn.className = 'settings-close';
         closeBtn.title = 'Close';

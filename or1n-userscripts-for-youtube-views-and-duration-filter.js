@@ -25,7 +25,7 @@
         MIN_VIEWS: 10000,
         MIN_DURATION_SECONDS: 240,
         DEBOUNCE_DELAY: 100,
-        DEBUG: false,
+        DEBUG: true,  // ENABLED FOR TESTING - shows console logs
         SMOOTH_REMOVAL: true,
         SHOW_COUNTER: true,
         COUNTER_DRAGGABLE: true,
@@ -138,44 +138,40 @@
 
     /**
      * Extract video metadata from various YouTube elements
+     * FIXED FOR YOUTUBE 2025: Uses text content scanning instead of CSS selectors
      */
     const extractVideoData = (element) => {
-        // Try multiple selectors for views (YouTube updates these frequently)
-        const viewSelectors = [
-            'span.inline-metadata-item:first-of-type',
-            '#metadata-line span:first-child',
-            'span.ytd-video-meta-block:first-of-type',
-            '.ytd-video-meta-block span:first-child',
-            '#metadata-line .inline-metadata-item:first-child'
-        ];
+        try {
+            let viewsText = null;
+            let durationText = null;
 
-        let viewsText = null;
-        for (const selector of viewSelectors) {
-            const viewElement = element.querySelector(selector);
-            if (viewElement?.textContent) {
-                viewsText = viewElement.textContent;
-                break;
+            // Get all text content from the element
+            const allText = element.innerText || element.textContent || '';
+            const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
+
+            // Scan for views (123K views, 5.2M views, etc)
+            for (const line of lines) {
+                if (line.match(/\d+(?:[.,]\d+)?[KMB]?\s+(?:views?|visualizações|просмотров)/i)) {
+                    viewsText = line;
+                    log(`✓ Found views: "${line}"`);
+                    break;
+                }
             }
-        }
 
-        // Try multiple selectors for duration
-        const durationSelectors = [
-            'span.ytd-thumbnail-overlay-time-status-renderer',
-            '#time-status #text',
-            '.ytd-thumbnail-overlay-time-status-renderer #text',
-            'ytd-thumbnail-overlay-time-status-renderer span'
-        ];
-
-        let durationText = null;
-        for (const selector of durationSelectors) {
-            const durationElement = element.querySelector(selector);
-            if (durationElement?.textContent?.trim()) {
-                durationText = durationElement.textContent.trim();
-                break;
+            // Scan for duration (12:34 or 1:23:45 format)
+            for (const line of lines) {
+                if (line.match(/^\d+:\d+(?::\d+)?$/)) {
+                    durationText = line;
+                    log(`✓ Found duration: "${line}"`);
+                    break;
+                }
             }
-        }
 
-        return { viewsText, durationText };
+            return { viewsText, durationText };
+        } catch (e) {
+            log('Error extracting video data:', e.message);
+            return { viewsText: null, durationText: null };
+        }
     };
 
     /**

@@ -149,9 +149,15 @@
             const allText = element.innerText || element.textContent || '';
             const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
 
-            // Scan for views (123K views, 5.2M views, etc)
+            log('=== Extracting video data ===');
+            log('Total lines found:', lines.length);
+            log('All text:', allText.substring(0, 200));
+            
+            // Scan for views - more flexible regex
             for (const line of lines) {
-                if (line.match(/\d+(?:[.,]\d+)?[KMB]?\s+(?:views?|visualizações|просмотров)/i)) {
+                log('Checking line:', JSON.stringify(line));
+                // Match: number + optional K/M/B + optional space + "view" or "views"
+                if (line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:view|views|visualizações|просмотров)/i)) {
                     viewsText = line;
                     log(`✓ Found views: "${line}"`);
                     break;
@@ -167,6 +173,7 @@
                 }
             }
 
+            log('Result - Views:', viewsText, 'Duration:', durationText);
             return { viewsText, durationText };
         } catch (e) {
             log('Error extracting video data:', e.message);

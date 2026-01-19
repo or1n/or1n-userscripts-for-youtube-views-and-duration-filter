@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.9
+// @version      3.1.0
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -81,15 +81,18 @@
     /**
      * Parse view count strings with K/M/B multipliers
      * Examples: "1.2K views" -> 1200, "5M views" -> 5000000
+     * FIX: Now receives clean view text like "13m views" instead of entire lines
      */
     const parseViewCount = (text) => {
         if (!text) return 0;
         
-        // MUST contain "view" or "views" keyword - more strict matching
-        // Match the LAST number+multiplier before "views" to avoid episode numbers, etc.
-        // This prevents matching numbers from video titles like "Episode 353" or "3:17"
-        const viewMatch = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?\s*(?:view|views|visualizações|просмотров)(?!\w)/i);
-        if (!viewMatch) return 0;
+        // Extract number and multiplier from text like "13m views", "1.2K views", etc
+        // This regex is more lenient since we now pass clean view text
+        const viewMatch = text.match(/(\d+(?:[.,]\d+)*)\s*([KkMmBbТтЛл])?/);
+        if (!viewMatch) {
+            log('⚠️ parseViewCount: Could not extract number from:', text);
+            return 0;
+        }
 
         let [, count, multiplier] = viewMatch;
         count = parseFloat(count.replace(/,/g, ''));
@@ -100,18 +103,29 @@
             'B': 1e9, 'b': 1e9
         };
 
-        return Math.floor(count * (multipliers[multiplier] || 1));
+        const result = Math.floor(count * (multipliers[multiplier] || 1));
+        log('📊 parseViewCount:', text, '-> extracted:', count, 'multiplier:', multiplier, '-> result:', result);
+        return result;
     };
 
     /**
      * Convert time string to seconds
      * Examples: "12:34" -> 754, "1:02:45" -> 3765
+     * FIX: Now handles edge cases and validates input
      */
     const timeToSeconds = (timeStr) => {
-        if (!timeStr) return 0;
+        if (!timeStr || typeof timeStr !== 'string') return 0;
         
-        const parts = timeStr.split(':').map(p => parseInt(p, 10) || 0);
-        return parts.reduce((acc, val, idx) => acc + val * Math.pow(60, parts.length - 1 - idx), 0);
+        // Remove any non-time characters, keep only digits and colons
+        const cleaned = timeStr.trim().match(/\d+(?::\d+)*/)?.[0];
+        if (!cleaned) return 0;
+        
+        const parts = cleaned.split(':').map(p => parseInt(p, 10) || 0);
+        if (parts.length === 0) return 0;
+        
+        const result = parts.reduce((acc, val, idx) => acc + val * Math.pow(60, parts.length - 1 - idx), 0);
+        log('⏱️ timeToSeconds:', timeStr, '-> cleaned:', cleaned, '-> result:', result);
+        return result;
     };
 
     /**
@@ -137,7 +151,7 @@
 
     /**
      * Extract video metadata from various YouTube elements
-     * FIXED FOR YOUTUBE 2025: Uses text content scanning instead of CSS selectors
+     * FIXED FOR YOUTUBE 2025: Handles concatenated text, extracts only relevant portions
      */
     const extractVideoData = (element) => {
         try {
@@ -153,24 +167,42 @@
             log('Total lines found:', lines.length);
             log('All text (first 300 chars):', allText.substring(0, 300));
             
-            // Scan for views - more flexible regex
+            // Scan for views - extract ONLY the view count portion, not entire line
             for (const line of lines) {
                 log('  >> Checking line:', JSON.stringify(line));
-                // Match: number + optional K/M/B + optional space + "view" or "views"
-                if (line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:view|views|visualizações|просмотров)/i)) {
-                    viewsText = line;
-                    log(`  ✅ MATCHED VIEWS: "${line}"`);
+                // Try to find view count in this line
+                // This regex extracts: number + multiplier + "views" keyword
+                const viewMatch = line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:view|views|visualizações|просмотров)/i);
+                if (viewMatch) {
+                    viewsText = viewMatch[0]; // Extract ONLY the matched portion
+                    log(`  ✅ MATCHED VIEWS: "${viewsText}"`);
                     break;
                 }
             }
 
             // Scan for duration (12:34 or 1:23:45 format)
+            // First try to find duration on its own line
             for (const line of lines) {
                 if (line.match(/^\d+:\d+(?::\d+)?$/)) {
                     durationText = line;
-                    log(`  ✅ MATCHED DURATION: "${line}"`);
+                    log(`  ✅ MATCHED DURATION (clean): "${line}"`);
                     break;
                 }
+            }
+            
+            // If no clean duration found, search within concatenated text
+            if (!durationText) {
+                const durationMatch = allText.match(/\b(\d+:\d+(?::\d+)?)\b/);
+                if (durationMatch) {
+                    durationText = durationMatch[1];
+                    log(`  ✅ MATCHED DURATION (extracted): "${durationText}"`);
+                }
+            }
+            
+            // Handle LIVE streams - explicitly check for "watching" instead of views
+            const watchingMatch = allText.match(/\d+\s*(?:watching|viewers)/i);
+            if (watchingMatch && !viewsText) {
+                log(`  ℹ️ LIVE STREAM DETECTED (${watchingMatch[0]}) - Will be skipped`);
             }
 
             log('📌 Final result - Views:', viewsText, '| Duration:', durationText);
@@ -198,20 +230,28 @@
         const viewCount = parseViewCount(viewsText || '');
         const durationSeconds = timeToSeconds(durationText || '');
 
+        log('📈 Parsed values - viewCount:', viewCount, 'durationSeconds:', durationSeconds);
+        log('⚙️ Config thresholds - MIN_VIEWS:', CONFIG.MIN_VIEWS, 'MIN_DURATION_SECONDS:', CONFIG.MIN_DURATION_SECONDS);
+
         // Check filters
-        const viewsLow = viewsText && viewCount < CONFIG.MIN_VIEWS;
+        const viewsLow = viewsText && viewCount > 0 && viewCount < CONFIG.MIN_VIEWS;
         const durationShort = durationText && durationSeconds > 0 && durationSeconds < CONFIG.MIN_DURATION_SECONDS;
 
         if (viewsLow || durationShort) {
-            log(`Filtering: ${viewCount} views, ${durationSeconds}s duration`);
+            const reason = [];
+            if (viewsLow) reason.push(`${viewCount} views < ${CONFIG.MIN_VIEWS}`);
+            if (durationShort) reason.push(`${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
+            log(`🚫 FILTERING: ${reason.join(' AND ')}`);
             return true;
         }
 
+        log('✅ Video passes filters');
         return false;
     };
 
     /**
      * Get the container element to remove
+     * FIX: Added fallback strategy - if no standard container found, try parent traversal
      */
     const getContainerToRemove = (element) => {
         // Find the appropriate parent container
@@ -236,7 +276,26 @@
             }
         }
 
-        log('⚠️ No matching container found, using element itself:', element.tagName);
+        // FALLBACK STRATEGY: If no standard container found, traverse up the DOM
+        // Look for any parent that is a reasonable removal candidate
+        log('⚠️ Standard selectors failed, attempting fallback parent traversal');
+        let parent = element.parentElement;
+        let depth = 0;
+        while (parent && depth < 10) {
+            const tagName = parent.tagName.toLowerCase();
+            const classList = parent.className;
+            
+            // Look for elements that look like video containers
+            if (tagName.includes('ytd-') || classList.includes('video') || classList.includes('item')) {
+                log(`📦 FALLBACK: Found potential container at depth ${depth}:`, tagName);
+                return parent;
+            }
+            
+            parent = parent.parentElement;
+            depth++;
+        }
+
+        log('⚠️ No suitable container found even with fallback, using element itself:', element.tagName);
         return element;
     };
 

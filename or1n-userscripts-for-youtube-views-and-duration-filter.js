@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.2.1
+// @version      3.3.0
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -39,7 +39,12 @@
         FONT_WEIGHT: 'normal',
         COUNTER_OPACITY: 95,
         ENABLE_STATISTICS: true,
-        SHOW_NOTIFICATIONS: true
+        SHOW_NOTIFICATIONS: true,
+        WHITELIST: [],
+        BLACKLIST: [],
+        FILTER_MODE: 'AND',  // 'AND' or 'OR' - how to combine view and duration filters
+        ENABLE_WHITELIST: true,
+        ENABLE_BLACKLIST: true
     };
 
     // Load saved configuration
@@ -144,6 +149,29 @@
     const log = (...args) => {
         if (CONFIG.DEBUG) {
             console.log('[YT Filter Pro]', ...args);
+        }
+    };
+
+    /**
+     * Extract channel name/URL from video element
+     */
+    const extractChannelInfo = (element) => {
+        try {
+            const channelLink = element.querySelector('a[href*="/channel/"], a[href*="/@"]');
+            if (!channelLink) return null;
+            
+            const href = channelLink.href || '';
+            const channelMatch = href.match(/\/(channel\/[^/?]+|@[^/?]+)/);
+            if (channelMatch) {
+                const channelId = channelMatch[1];
+                const channelText = channelLink.textContent.trim();
+                log('📺 Extracted channel:', channelId, '(' + channelText + ')');
+                return { id: channelId, name: channelText, href: href };
+            }
+            return null;
+        } catch (e) {
+            log('⚠️ Error extracting channel:', e.message);
+            return null;
         }
     };
 
@@ -269,6 +297,88 @@
 
         log('✅ Video passes filters');
         return false;
+    };
+    /**
+     * Check if video should be filtered
+     */
+    const shouldFilterVideo = (element) => {
+        log('🔍 shouldFilterVideo called for element:', element.tagName);
+        
+        // Check whitelist first
+        const channelInfo = extractChannelInfo(element);
+        if (CONFIG.ENABLE_WHITELIST && channelInfo) {
+            const isWhitelisted = CONFIG.WHITELIST.some(ch => 
+                ch === channelInfo.id || ch === channelInfo.name || ch === channelInfo.href
+            );
+            if (isWhitelisted) {
+                log(`✅ WHITELISTED: ${channelInfo.name} - skipping filter`);
+                return false;
+            }
+        }
+        
+        // Check blacklist
+        if (CONFIG.ENABLE_BLACKLIST && channelInfo) {
+            const isBlacklisted = CONFIG.BLACKLIST.some(ch => 
+                ch === channelInfo.id || ch === channelInfo.name || ch === channelInfo.href
+            );
+            if (isBlacklisted) {
+                log(`🚫 BLACKLISTED: ${channelInfo.name} - filtering`);
+                return true;
+            }
+        }
+        
+        const { viewsText, durationText } = extractVideoData(element);
+        log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
+
+        // Skip if missing critical data
+        if (!viewsText && !durationText) {
+            log('⏭️ Skipping: no views or duration found');
+            return false;
+        }
+
+        const viewCount = parseViewCount(viewsText || '');
+        const durationSeconds = timeToSeconds(durationText || '');
+
+        log('📈 Parsed values - viewCount:', viewCount, 'durationSeconds:', durationSeconds);
+        log('⚙️ Config thresholds - MIN_VIEWS:', CONFIG.MIN_VIEWS, 'MIN_DURATION_SECONDS:', CONFIG.MIN_DURATION_SECONDS);
+
+        // Check filters based on mode
+        const viewsLow = viewsText && viewCount > 0 && viewCount < CONFIG.MIN_VIEWS;
+        const durationShort = durationText && durationSeconds > 0 && durationSeconds < CONFIG.MIN_DURATION_SECONDS;
+
+        let shouldFilter = false;
+        if (CONFIG.FILTER_MODE === 'OR') {
+            // OR mode: filter if EITHER condition is true
+            shouldFilter = viewsLow || durationShort;
+            if (shouldFilter) {
+                const reason = [];
+                if (viewsLow) reason.push(`${viewCount} views < ${CONFIG.MIN_VIEWS}`);
+                if (durationShort) reason.push(`${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
+                log(`🚫 FILTERING (OR mode): ${reason.join(' OR ')}`);
+            }
+        } else {
+            // AND mode: filter if BOTH conditions are true (or only one is applicable)
+            if (viewsText && durationText) {
+                // Both metrics present: require both to be low
+                shouldFilter = viewsLow && durationShort;
+                if (shouldFilter) {
+                    log(`🚫 FILTERING (AND mode): ${viewCount} views < ${CONFIG.MIN_VIEWS} AND ${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
+                }
+            } else if (viewsText) {
+                // Only views: check views
+                shouldFilter = viewsLow;
+                if (shouldFilter) log(`🚫 FILTERING (AND mode - views only): ${viewCount} views < ${CONFIG.MIN_VIEWS}`);
+            } else if (durationText) {
+                // Only duration: check duration
+                shouldFilter = durationShort;
+                if (shouldFilter) log(`🚫 FILTERING (AND mode - duration only): ${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
+            }
+        }
+
+        if (!shouldFilter) {
+            log('✅ Video passes filters');
+        }
+        return shouldFilter;
     };
 
     /**
@@ -432,6 +542,11 @@
         toggleBtn.title = 'Hide Counter';
         toggleBtn.textContent = '−';
         
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'yt-filter-menu';
+        menuBtn.title = 'Quick Menu';
+        menuBtn.textContent = '⋮';
+        
         const closeBtn = document.createElement('button');
         closeBtn.className = 'yt-filter-close';
         closeBtn.title = 'Close Counter';
@@ -439,6 +554,7 @@
         
         buttons.appendChild(settingsBtn);
         buttons.appendChild(toggleBtn);
+        buttons.appendChild(menuBtn);
         buttons.appendChild(closeBtn);
         header.appendChild(title);
         header.appendChild(buttons);
@@ -500,13 +616,88 @@
         // Apply theme and font settings
         applyCounterStyle(counter);
 
-        // Settings button (already created above)
+        // Quick menu (hidden by default)
+        const quickMenu = document.createElement('div');
+        quickMenu.className = 'yt-filter-quick-menu';
+        quickMenu.style.display = 'none';
+        
+        const menuItems = [
+            { text: '👁️ Toggle Counter', action: () => {
+                const isHidden = stats.style.display === 'none';
+                stats.style.display = isHidden ? 'block' : 'none';
+                toggleBtn.textContent = isHidden ? '−' : '+';
+            }},
+            { text: '🚫 Close Counter', action: () => {
+                counter.style.transition = 'opacity 0.3s ease';
+                counter.style.opacity = '0';
+                setTimeout(() => {
+                    counter.remove();
+                    state.counterElement = null;
+                }, 300);
+            }},
+            { text: '📈 Reset Stats', action: () => {
+                if (confirm('Reset all statistics? Cannot be undone.')) {
+                    state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
+                    saveStats();
+                    showNotification('✓ Statistics reset', 1500);
+                }
+            }},
+            { text: '🔄 Force Filter', action: () => {
+                state.processedVideos = new WeakSet();
+                filterVideos();
+                showNotification('✓ Filtering complete', 1500);
+            }}
+        ];
+        
+        // Get current channel for whitelist/blacklist options
+        const currentVideo = counter.closest('body').querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
+        if (currentVideo) {
+            const channelInfo = extractChannelInfo(currentVideo);
+            if (channelInfo) {
+                menuItems.push(
+                    { text: `✅ Whitelist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                        if (!CONFIG.WHITELIST.includes(channelInfo.id)) {
+                            CONFIG.WHITELIST.push(channelInfo.id);
+                            saveConfig(CONFIG);
+                            showNotification(`✅ Whitelisted: ${channelInfo.name}`, 2000);
+                        } else {
+                            showNotification(`Already whitelisted`, 1500);
+                        }
+                    }},
+                    { text: `🚫 Blacklist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                        if (!CONFIG.BLACKLIST.includes(channelInfo.id)) {
+                            CONFIG.BLACKLIST.push(channelInfo.id);
+                            saveConfig(CONFIG);
+                            showNotification(`🚫 Blacklisted: ${channelInfo.name}`, 2000);
+                        } else {
+                            showNotification(`Already blacklisted`, 1500);
+                        }
+                    }}
+                );
+            }
+        }
+        menuItems.forEach(item => {
+            const menuItem = document.createElement('button');
+            menuItem.className = 'yt-filter-menu-item';
+            menuItem.textContent = item.text;
+            menuItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                item.action();
+                quickMenu.style.display = 'none';
+            });
+            quickMenu.appendChild(menuItem);
+        });
+        
+        counter.appendChild(quickMenu);
+
+        // Settings button
         settingsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            quickMenu.style.display = 'none';
             toggleSettingsPanel();
         });
 
-        // Toggle visibility (already created above)
+        // Toggle visibility
         const statsDiv = stats;
         toggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -514,6 +705,13 @@
             statsDiv.style.display = isHidden ? 'block' : 'none';
             toggleBtn.textContent = isHidden ? '−' : '+';
             toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
+            quickMenu.style.display = 'none';
+        });
+
+        // Menu button
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            quickMenu.style.display = quickMenu.style.display === 'none' ? 'flex' : 'none';
         });
 
         // Close button - completely hides and closes the counter
@@ -699,6 +897,99 @@
         filterSection.appendChild(createInputRow('Minimum Views', 'number', 'setting-min-views', CONFIG.MIN_VIEWS, 0, null, 1000));
         filterSection.appendChild(createInputRow('Minimum Duration (seconds)', 'number', 'setting-min-duration', CONFIG.MIN_DURATION_SECONDS, 0, null, 30));
         body.appendChild(filterSection);
+
+        // === FILTER MODE ===
+        const modeSection = createSection('⚡ Filter Logic');
+        const modeItem = document.createElement('div');
+        modeItem.className = 'setting-item';
+        const modeLbl = document.createElement('label');
+        modeLbl.textContent = 'Combine Filters With:';
+        const modeSelect = document.createElement('select');
+        modeSelect.id = 'setting-filter-mode';
+        ['AND', 'OR'].forEach(val => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val === 'AND' ? 'AND (both conditions must be true)' : 'OR (any condition can be true)';
+            opt.selected = CONFIG.FILTER_MODE === val;
+            modeSelect.appendChild(opt);
+        });
+        modeItem.appendChild(modeLbl);
+        modeItem.appendChild(modeSelect);
+        const modeInfo = document.createElement('small');
+        modeInfo.textContent = 'AND: filters only if BOTH view count AND duration are below thresholds. OR: filters if EITHER is below threshold.';
+        modeItem.appendChild(modeInfo);
+        modeSection.appendChild(modeItem);
+        body.appendChild(modeSection);
+
+        // === WHITELIST ===
+        const whitelistSection = createSection('✅ Whitelist (Never Filter)');
+        const whitelistToggle = document.createElement('div');
+        whitelistToggle.className = 'setting-item';
+        const whitelistCb = document.createElement('input');
+        whitelistCb.type = 'checkbox';
+        whitelistCb.id = 'setting-enable-whitelist';
+        whitelistCb.checked = CONFIG.ENABLE_WHITELIST;
+        const whitelistToggleLbl = document.createElement('label');
+        whitelistToggleLbl.appendChild(whitelistCb);
+        whitelistToggleLbl.appendChild(document.createTextNode(' Enable Whitelist'));
+        whitelistToggle.appendChild(whitelistToggleLbl);
+        whitelistSection.appendChild(whitelistToggle);
+        
+        const whitelistList = document.createElement('div');
+        whitelistList.id = 'whitelist-container';
+        whitelistList.className = 'list-container';
+        CONFIG.WHITELIST.forEach(channel => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.innerHTML = `<span>${channel.replace(/^channel\/|^@/, '')}</span>`;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn-remove-item';
+            removeBtn.textContent = '✕';
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                CONFIG.WHITELIST = CONFIG.WHITELIST.filter(ch => ch !== channel);
+                item.remove();
+            });
+            item.appendChild(removeBtn);
+            whitelistList.appendChild(item);
+        });
+        whitelistSection.appendChild(whitelistList);
+        body.appendChild(whitelistSection);
+
+        // === BLACKLIST ===
+        const blacklistSection = createSection('🚫 Blacklist (Always Filter)');
+        const blacklistToggle = document.createElement('div');
+        blacklistToggle.className = 'setting-item';
+        const blacklistCb = document.createElement('input');
+        blacklistCb.type = 'checkbox';
+        blacklistCb.id = 'setting-enable-blacklist';
+        blacklistCb.checked = CONFIG.ENABLE_BLACKLIST;
+        const blacklistToggleLbl = document.createElement('label');
+        blacklistToggleLbl.appendChild(blacklistCb);
+        blacklistToggleLbl.appendChild(document.createTextNode(' Enable Blacklist'));
+        blacklistToggle.appendChild(blacklistToggleLbl);
+        blacklistSection.appendChild(blacklistToggle);
+        
+        const blacklistList = document.createElement('div');
+        blacklistList.id = 'blacklist-container';
+        blacklistList.className = 'list-container';
+        CONFIG.BLACKLIST.forEach(channel => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.innerHTML = `<span>${channel.replace(/^channel\/|^@/, '')}</span>`;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn-remove-item';
+            removeBtn.textContent = '✕';
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                CONFIG.BLACKLIST = CONFIG.BLACKLIST.filter(ch => ch !== channel);
+                item.remove();
+            });
+            item.appendChild(removeBtn);
+            blacklistList.appendChild(item);
+        });
+        blacklistSection.appendChild(blacklistList);
+        body.appendChild(blacklistSection);
 
         // === APPEARANCE ===
         const appearanceSection = createSection('🎨 Appearance');
@@ -944,6 +1235,9 @@
         saveBtn.addEventListener('click', () => {
             CONFIG.MIN_VIEWS = parseInt(document.querySelector('#setting-min-views').value) || 0;
             CONFIG.MIN_DURATION_SECONDS = parseInt(document.querySelector('#setting-min-duration').value) || 0;
+            CONFIG.FILTER_MODE = document.querySelector('#setting-filter-mode').value;
+            CONFIG.ENABLE_WHITELIST = document.querySelector('#setting-enable-whitelist').checked;
+            CONFIG.ENABLE_BLACKLIST = document.querySelector('#setting-enable-blacklist').checked;
             CONFIG.THEME = document.querySelector('#setting-theme').value;
             CONFIG.FONT_FAMILY = document.querySelector('#setting-font-family').value;
             CONFIG.FONT_SIZE = parseInt(document.querySelector('#setting-font-size').value) || 14;
@@ -1020,7 +1314,8 @@
                     const isVisible = state.counterElement.style.display !== 'none';
                     state.counterElement.style.display = isVisible ? 'none' : 'block';
                     if (CONFIG.SHOW_NOTIFICATIONS) {
-                        showNotification(isVisible ? '👁️ Counter Hidden' : '👁️ Counter Visible', 2000);
+                        const sessionCount = state.sessionFiltered.toLocaleString();
+                        showNotification(isVisible ? `👁️ Counter Hidden (${sessionCount} filtered)` : `👁️ Counter Visible (${sessionCount} filtered)`, 2000);
                     }
                 }
             }
@@ -1105,6 +1400,7 @@
 
             .yt-filter-settings,
             .yt-filter-toggle,
+            .yt-filter-menu,
             .yt-filter-close {
                 background: rgba(255, 255, 255, 0.2);
                 border: none;
@@ -1124,8 +1420,47 @@
 
             .yt-filter-settings:hover,
             .yt-filter-toggle:hover,
+            .yt-filter-menu:hover,
             .yt-filter-close:hover {
                 background: rgba(255, 255, 255, 0.3);
+            }
+
+            .yt-filter-quick-menu {
+                display: none;
+                flex-direction: column;
+                position: absolute;
+                top: 100%;
+                right: 0;
+                background: ${CONFIG.THEME === 'dark' ? '#1a1a1a' : '#ffffff'};
+                border: 1px solid ${theme.border};
+                border-radius: 8px;
+                margin-top: 5px;
+                min-width: 200px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                z-index: 1000000;
+            }
+
+            .yt-filter-menu-item {
+                padding: 10px 15px;
+                border: none;
+                background: transparent;
+                color: ${theme.text};
+                text-align: left;
+                cursor: pointer;
+                transition: background 0.2s;
+                font-size: 13px;
+            }
+
+            .yt-filter-menu-item:first-child {
+                border-radius: 8px 8px 0 0;
+            }
+
+            .yt-filter-menu-item:last-child {
+                border-radius: 0 0 8px 8px;
+            }
+
+            .yt-filter-menu-item:hover {
+                background: ${CONFIG.THEME === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'};
             }
 
             .yt-filter-stats {
@@ -1282,17 +1617,19 @@
                 font-size: 14px;
             }
 
+            .setting-item small {
+                display: block;
+                margin-top: 8px;
+                color: ${theme.textMuted};
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
             .setting-item input[type="range"] {
                 width: calc(100% - 60px);
                 margin-right: 10px;
             }
 
-            .setting-item small {
-                display: block;
-                margin-top: 5px;
-                color: ${theme.textMuted};
-                font-size: 12px;
-            }
 
             .keyboard-shortcut {
                 display: flex;
@@ -1360,6 +1697,52 @@
 
             .settings-footer button:active {
                 transform: scale(0.98);
+            .list-container {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 10px;
+                max-height: 200px;
+                overflow-y: auto;
+                padding: 10px;
+                background: ${theme.statBg};
+                border-radius: 6px;
+                border: 1px solid ${CONFIG.THEME === 'dark' ? '#333' : '#ddd'};
+            }
+
+            .list-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 12px;
+                background: ${CONFIG.THEME === 'dark' ? '#2a2a2a' : '#f5f5f5'};
+                border-radius: 4px;
+                border-left: 3px solid ${theme.border};
+                font-size: 13px;
+            }
+
+            .list-item span {
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .btn-remove-item {
+                background: #ff4444;
+                color: #fff;
+                border: none;
+                padding: 2px 8px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 12px;
+                margin-left: 8px;
+                transition: background 0.2s;
+            }
+
+            .btn-remove-item:hover {
+                background: #dd0000;
+            }
             }
 
             .btn-reset {
@@ -1466,13 +1849,85 @@
         }
 
         log('Initializing YouTube Filter Pro 3.2.1...');
+    log('Initializing YouTube Filter Pro 3.3.0...');
 
         // Inject styles immediately
         injectStyles();
 
-        // Register Tampermonkey menu command
+        // Register Tampermonkey menu commands
         if (typeof GM_registerMenuCommand !== 'undefined') {
             GM_registerMenuCommand('⚙️ Open Settings', () => toggleSettingsPanel());
+            GM_registerMenuCommand('👁️ Toggle Counter', () => {
+                if (state.counterElement) {
+                    const isVisible = state.counterElement.style.display !== 'none';
+                    state.counterElement.style.display = isVisible ? 'none' : 'block';
+                    const sessionCount = state.sessionFiltered.toLocaleString();
+                    showNotification(isVisible ? `Counter Hidden (${sessionCount} filtered)` : `Counter Visible (${sessionCount} filtered)`, 2000);
+                }
+            });
+            GM_registerMenuCommand('📊 Open UI', () => {
+                if (!state.counterElement) {
+                    createCounter();
+                }
+                state.counterElement.style.display = 'block';
+                showNotification('📊 Counter Displayed', 1500);
+            });
+            GM_registerMenuCommand('🚫 Close Counter', () => {
+                if (state.counterElement) {
+                    state.counterElement.style.transition = 'opacity 0.3s ease';
+                    state.counterElement.style.opacity = '0';
+                    setTimeout(() => {
+                        state.counterElement.remove();
+                        state.counterElement = null;
+                    }, 300);
+                    showNotification('Counter Closed', 1500);
+                }
+            });
+            GM_registerMenuCommand('📈 Reset Statistics', () => {
+                if (confirm('Reset all lifetime statistics? This cannot be undone.')) {
+                    state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
+                    saveStats();
+                    showNotification('✓ Statistics reset successfully', 2000);
+                }
+            });
+            GM_registerMenuCommand('✅ Add Current Channel to Whitelist', () => {
+                const currentVideo = document.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
+                if (currentVideo) {
+                    const channelInfo = extractChannelInfo(currentVideo);
+                    if (channelInfo) {
+                        if (!CONFIG.WHITELIST.includes(channelInfo.id)) {
+                            CONFIG.WHITELIST.push(channelInfo.id);
+                            saveConfig(CONFIG);
+                            showNotification(`✅ Added "${channelInfo.name}" to whitelist`, 2000);
+                        } else {
+                            showNotification(`Already whitelisted: ${channelInfo.name}`, 2000);
+                        }
+                    } else {
+                        showNotification('⚠️ Could not find channel info', 2000);
+                    }
+                } else {
+                    showNotification('⚠️ No video found on page', 2000);
+                }
+            });
+            GM_registerMenuCommand('🚫 Add Current Channel to Blacklist', () => {
+                const currentVideo = document.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
+                if (currentVideo) {
+                    const channelInfo = extractChannelInfo(currentVideo);
+                    if (channelInfo) {
+                        if (!CONFIG.BLACKLIST.includes(channelInfo.id)) {
+                            CONFIG.BLACKLIST.push(channelInfo.id);
+                            saveConfig(CONFIG);
+                            showNotification(`🚫 Added "${channelInfo.name}" to blacklist`, 2000);
+                        } else {
+                            showNotification(`Already blacklisted: ${channelInfo.name}`, 2000);
+                        }
+                    } else {
+                        showNotification('⚠️ Could not find channel info', 2000);
+                    }
+                } else {
+                    showNotification('⚠️ No video found on page', 2000);
+                }
+            });
         }
 
         // Wait for page to be ready

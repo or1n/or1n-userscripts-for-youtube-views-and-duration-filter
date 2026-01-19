@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.2.0
+// @version      3.2.1
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -1465,7 +1465,7 @@
             return;
         }
 
-        log('Initializing YouTube Filter Pro 3.2.0...');
+        log('Initializing YouTube Filter Pro 3.2.1...');
 
         // Inject styles immediately
         injectStyles();

@@ -1,19 +1,24 @@
 // ==UserScript==
-// @name         or1n-userscripts-for-youtube-views-and-duration-filter
+// @name         or1n YouTube Filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.3.1
-// @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
+// @version      3.4.1
+// @description  Advanced YouTube video filter with smart filtering, customizable UI, and comprehensive statistics
 // @author       or1n
 // @license      MIT
 // @homepage     https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
+// @homepageURL  https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
 // @supportURL   https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/issues
-// @updateURL    https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/refs/heads/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
-// @downloadURL  https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/refs/heads/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
+// @updateURL    https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/main/or1n-userscripts-for-youtube-views-and-duration-filter.meta.js
+// @downloadURL  https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
 // @match        *://*.youtube.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=youtube.com
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
+// @compatible   chrome
+// @compatible   firefox
+// @compatible   edge
+// @noframes
 // @run-at       document-start
 // ==/UserScript==
 
@@ -22,29 +27,90 @@
 
     // ==================== DEFAULT CONFIGURATION ====================
     const DEFAULT_CONFIG = {
-        MIN_VIEWS: 99999,
-        MIN_DURATION_SECONDS: 240,
-        DEBOUNCE_DELAY: 100,
-        DEBUG: true,  // ENABLED FOR TESTING - shows console logs
-        SMOOTH_REMOVAL: true,
-        SHOW_COUNTER: true,
-        COUNTER_DRAGGABLE: true,
-        THEME: 'dark',
-        KEYBOARD_SHORTCUT: 'KeyF',
-        USE_CTRL: true,
-        USE_ALT: false,
-        USE_SHIFT: false,
-        FONT_FAMILY: 'Segoe UI',
-        FONT_SIZE: 14,
-        FONT_WEIGHT: 'normal',
-        COUNTER_OPACITY: 95,
-        ENABLE_STATISTICS: true,
-        SHOW_NOTIFICATIONS: true,
-        WHITELIST: [],
-        BLACKLIST: [],
-        FILTER_MODE: 'AND',  // 'AND' or 'OR' - how to combine view and duration filters
-        ENABLE_WHITELIST: true,
-        ENABLE_BLACKLIST: true
+        // Filter Thresholds
+        MIN_VIEWS: 99999,                    // Minimum view count required - videos below this are filtered
+        MIN_DURATION_SECONDS: 240,           // Minimum duration in seconds (240s = 4min) - shorter videos are filtered
+        
+        // Performance
+        DEBOUNCE_DELAY: 30,                 // Milliseconds to wait before processing mutations (lower = faster but more CPU)
+        
+        // Debugging
+        DEBUG: false,                        // Enable console logging for troubleshooting
+        
+        // Animations & Effects
+        SMOOTH_REMOVAL: false,                // Animate video removal with fade/scale effects
+        REMOVAL_DURATION_MS: 300,            // How long removal animation takes in milliseconds
+        REMOVAL_SCALE: 0.95,                 // Scale factor during removal (0.95 = shrink to 95%)
+        
+        // Counter UI
+        SHOW_COUNTER: true,                  // Display the floating statistics counter
+        COUNTER_DRAGGABLE: true,             // Allow dragging the counter to reposition it
+        COUNTER_OPACITY: 95,                 // Counter transparency (0-100, higher = more opaque)
+        COUNTER_PULSE_DURATION_MS: 200,      // Duration of counter pulse animation when stats update
+        COUNTER_PULSE_SCALE: 1.3,            // Scale multiplier for pulse effect (1.3 = grow 30%)
+        
+        // Theme & Appearance
+        THEME: 'dark',                       // Color scheme: 'dark' or 'light'
+        FONT_FAMILY: 'Segoe UI',             // Font for counter and UI elements
+        FONT_SIZE: 14,                       // Base font size in pixels
+        FONT_WEIGHT: 'normal',               // Font weight: 'normal', 'bold', 'lighter', '600'
+        
+        // Keyboard Shortcut
+        KEYBOARD_SHORTCUT: 'KeyF',           // Key to toggle counter (KeyF = F key)
+        USE_CTRL: true,                      // Require Ctrl modifier for shortcut
+        USE_ALT: false,                      // Require Alt modifier for shortcut
+        USE_SHIFT: false,                    // Require Shift modifier for shortcut
+        
+        // Statistics
+        ENABLE_STATISTICS: true,             // Track lifetime filtering stats across sessions
+        
+        // Notifications
+        SHOW_NOTIFICATIONS: true,            // Display toast notifications for actions
+        NOTIFICATION_DURATION_MS: 3000,      // How long notifications stay visible in milliseconds
+        NOTIFICATION_FADE_MS: 300,           // Notification fade-in/out animation duration
+        
+        // Channel Lists
+        WHITELIST: [],                       // Channels to never filter (array of channel IDs/names)
+        BLACKLIST: [],                       // Channels to always filter (array of channel IDs/names)
+        ENABLE_WHITELIST: false,              // Apply whitelist rules
+        ENABLE_BLACKLIST: false,              // Apply blacklist rules
+        CASE_INSENSITIVE_LISTS: true,        // Ignore case when matching whitelist/blacklist entries
+        
+        // Filter Logic
+        FILTER_MODE: 'OR',                   // 'AND': both criteria must fail to filter | 'OR': either criterion can trigger filter
+        SKIP_LIVE_STREAMS: true,             // Do not filter videos currently streaming live
+        FILTER_ALL_LIVE_STREAMS: false,      // Hide ALL live streams regardless of views/duration (overrides SKIP_LIVE_STREAMS)
+        FILTER_ALL_SHORTS: false             // Hide ALL YouTube Shorts regardless of views/duration
+    };
+
+    const VIDEO_SELECTORS = [
+        'ytd-rich-item-renderer',
+        'ytd-video-renderer',
+        'ytd-grid-video-renderer',
+        'ytd-compact-video-renderer',
+        'ytd-playlist-video-renderer',
+        'ytd-rich-grid-media',
+        'yt-lockup-view-model',
+        'ytd-reel-item-renderer'  // YouTube Shorts
+    ];
+
+    // Constants for magic numbers
+    const CONSTANTS = {
+        CONFIRM_AUTO_DISMISS_MS: 6000,
+        INIT_RETRY_DELAY_MS: 100,
+        NAVIGATION_FILTER_DELAY_MS: 500,
+        SCROLL_FILTER_DELAY_MS: 300,
+        COUNTER_FADE_DURATION_MS: 300,
+        PARENT_TRAVERSAL_MAX_DEPTH: 10,
+        MAX_UNDO_HISTORY: 10,
+        YOUTUBE_SHORTCUTS: ['k', 'j', 'l', 'f', 'm', 'c', 'i', 't', 'p', 'y'],
+        NOTIFICATION_FADE_DELAY_MS: 10
+    };
+
+    // Cached selectors for performance
+    const CACHED_SELECTORS = {
+        videoSelector: VIDEO_SELECTORS.join(','),
+        channelLinks: 'a[href*="/channel/"], a[href*="/@"]'
     };
 
     // Load saved configuration
@@ -59,6 +125,12 @@
 
     let CONFIG = loadConfig();
 
+    // Thread-safe CONFIG update wrapper
+    const updateConfig = (updates) => {
+        CONFIG = { ...CONFIG, ...updates };
+        saveConfig(CONFIG);
+    };
+
     // ==================== STATE MANAGEMENT ====================
     const state = {
         filteredCount: 0,
@@ -69,11 +141,14 @@
         debounceTimer: null,
         counterElement: null,
         settingsPanel: null,
+        notificationQueue: [],
+        isShowingNotification: false,
         lifetimeStats: GM_getValue('lifetimeStats', {
             totalFiltered: 0,
             firstInstall: Date.now(),
             lastReset: Date.now()
-        })
+        }),
+        counterPosition: GM_getValue('counterPosition', null)
     };
 
     // Save lifetime stats
@@ -148,7 +223,117 @@
      */
     const log = (...args) => {
         if (CONFIG.DEBUG) {
-            console.log('[YT Filter Pro]', ...args);
+            console.log('[or1n YT filter]', ...args);
+        }
+    };
+
+    const prefersReducedMotion = () => {
+        return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    };
+
+    const normalizeCase = (value) => {
+        if (value == null) return '';
+        return CONFIG.CASE_INSENSITIVE_LISTS && typeof value === 'string' ? value.toLowerCase() : String(value);
+    };
+
+    const listContains = (list, value) => list.some(item => normalizeCase(item) === normalizeCase(value));
+
+    /**
+     * Detect keyboard shortcut conflicts with YouTube's native shortcuts
+     */
+    const detectShortcutConflicts = () => {
+        const conflicts = [];
+        const key = CONFIG.KEYBOARD_SHORTCUT.replace('Key', '').toLowerCase();
+        const modifiers = [];
+        
+        if (CONFIG.USE_CTRL) modifiers.push('Ctrl');
+        if (CONFIG.USE_ALT) modifiers.push('Alt');
+        if (CONFIG.USE_SHIFT) modifiers.push('Shift');
+        
+        const shortcutStr = modifiers.length > 0 
+            ? `${modifiers.join('+')}+${key.toUpperCase()}`
+            : key.toUpperCase();
+        
+        // Check against YouTube shortcuts (only if no modifiers)
+        if (modifiers.length === 0 && CONSTANTS.YOUTUBE_SHORTCUTS.includes(key)) {
+            conflicts.push({
+                severity: 'high',
+                message: `"${shortcutStr}" conflicts with YouTube's native shortcut`,
+                suggestion: 'Add Ctrl, Alt, or Shift modifier'
+            });
+        }
+        
+        // Check against common browser shortcuts
+        if (CONFIG.USE_CTRL && ['f', 't', 'w', 'n', 'p'].includes(key)) {
+            conflicts.push({
+                severity: 'medium',
+                message: `"${shortcutStr}" may conflict with browser shortcuts`,
+                suggestion: 'Consider using a different key'
+            });
+        }
+        
+        return { hasConflicts: conflicts.length > 0, conflicts, shortcutStr };
+    };
+
+    /**
+     * Extract and normalize channel name (reusable)
+     */
+    const normalizeChannelName = (name) => {
+        if (!name) return '';
+        return name.replace(/^channel\/|^@/, '').trim();
+    };
+
+    const confirmAction = (message, onConfirm) => {
+        try {
+            const existing = document.getElementById('yt-filter-confirm');
+            if (existing) existing.remove();
+
+            const wrapper = document.createElement('div');
+            wrapper.id = 'yt-filter-confirm';
+            wrapper.className = 'yt-filter-confirm';
+
+            const text = document.createElement('span');
+            text.textContent = message;
+            wrapper.appendChild(text);
+
+            const actions = document.createElement('div');
+            actions.className = 'yt-filter-confirm-actions';
+
+            const yesBtn = document.createElement('button');
+            yesBtn.textContent = 'Yes';
+            yesBtn.className = 'btn-yes';
+            yesBtn.addEventListener('click', () => {
+                wrapper.remove();
+                try {
+                    onConfirm();
+                } catch (e) {
+                    log('❌ Error in confirm callback:', e);
+                    showNotification('⚠️ Action failed');
+                }
+            });
+
+            const noBtn = document.createElement('button');
+            noBtn.textContent = 'No';
+            noBtn.className = 'btn-no';
+            noBtn.addEventListener('click', () => wrapper.remove());
+
+            actions.appendChild(yesBtn);
+            actions.appendChild(noBtn);
+            wrapper.appendChild(actions);
+
+            document.body.appendChild(wrapper);
+
+            requestAnimationFrame(() => wrapper.classList.add('show'));
+
+            setTimeout(() => {
+                if (wrapper.isConnected) wrapper.remove();
+            }, CONSTANTS.CONFIRM_AUTO_DISMISS_MS);
+        } catch (e) {
+            log('❌ Error in confirmAction:', e);
+            // Fallback to native confirm if DOM manipulation fails
+            if (window.confirm(message)) {
+                onConfirm();
+            }
         }
     };
 
@@ -157,14 +342,17 @@
      */
     const extractChannelInfo = (element) => {
         try {
-            const channelLink = element.querySelector('a[href*="/channel/"], a[href*="/@"]');
+            if (!element) return null;
+            const channelLink = element.querySelector(CACHED_SELECTORS.channelLinks);
             if (!channelLink) return null;
             
             const href = channelLink.href || '';
+            if (!href) return null;
+            
             const channelMatch = href.match(/\/(channel\/[^/?]+|@[^/?]+)/);
             if (channelMatch) {
                 const channelId = channelMatch[1];
-                const channelText = channelLink.textContent.trim();
+                const channelText = (channelLink.textContent || '').trim();
                 log('📺 Extracted channel:', channelId, '(' + channelText + ')');
                 return { id: channelId, name: channelText, href: href };
             }
@@ -185,12 +373,23 @@
         try {
             let viewsText = null;
             let durationText = null;
+            let isLive = false;
 
             log('🎬 === EXTRACTING VIDEO DATA ===');
             log('Element tag:', element.tagName);
+
+            // New-style 2025 cards expose duration in a badge element near the thumbnail
+            const durationBadge = element.querySelector('yt-thumbnail-badge-view-model .yt-badge-shape__text');
+            if (durationBadge) {
+                const badgeText = (durationBadge.textContent || '').trim();
+                if (/\d{1,2}:\d{2}(?::\d{2})?/.test(badgeText)) {
+                    durationText = badgeText;
+                    log(`✅ FOUND DURATION in badge: "${durationText}"`);
+                }
+            }
             
             // Strategy 1: Try to find spans with view counts (most reliable)
-            const metadataSpans = element.querySelectorAll('[role="text"], .metadata-row span, ytd-formatted-string');
+            const metadataSpans = element.querySelectorAll('[role="text"], .metadata-row span, ytd-formatted-string, .yt-content-metadata-view-model__metadata-row span');
             for (const span of metadataSpans) {
                 const text = (span.innerText || span.textContent || '').trim();
                 if (!text) continue;
@@ -251,15 +450,16 @@
             // Strategy 3: Handle LIVE streams
             const allText = element.innerText || element.textContent || '';
             const watchingMatch = allText.match(/\d+\s*(?:watching|viewers|ライブ視聴中)/i);
-            if (watchingMatch && !viewsText) {
-                log(`ℹ️ LIVE STREAM DETECTED - skipping`);
+            if (watchingMatch) {
+                isLive = true;
+                log('ℹ️ LIVE STREAM DETECTED - skipping filter');
             }
 
             log('📌 Final: Views:', viewsText, '| Duration:', durationText);
-            return { viewsText, durationText };
+            return { viewsText, durationText, isLive };
         } catch (e) {
             log('❌ ERROR in extractVideoData:', e.message);
-            return { viewsText: null, durationText: null };
+            return { viewsText: null, durationText: null, isLive: false };
         }
     };
 
@@ -272,9 +472,8 @@
         // Check whitelist first
         const channelInfo = extractChannelInfo(element);
         if (CONFIG.ENABLE_WHITELIST && channelInfo) {
-            const isWhitelisted = CONFIG.WHITELIST.some(ch => 
-                ch === channelInfo.id || ch === channelInfo.name || ch === channelInfo.href
-            );
+            const isWhitelisted = [channelInfo.id, channelInfo.name, channelInfo.href]
+                .some(val => listContains(CONFIG.WHITELIST, val));
             if (isWhitelisted) {
                 log(`✅ WHITELISTED: ${channelInfo.name} - skipping filter`);
                 return false;
@@ -283,16 +482,59 @@
         
         // Check blacklist
         if (CONFIG.ENABLE_BLACKLIST && channelInfo) {
-            const isBlacklisted = CONFIG.BLACKLIST.some(ch => 
-                ch === channelInfo.id || ch === channelInfo.name || ch === channelInfo.href
-            );
+            const isBlacklisted = [channelInfo.id, channelInfo.name, channelInfo.href]
+                .some(val => listContains(CONFIG.BLACKLIST, val));
             if (isBlacklisted) {
                 log(`🚫 BLACKLISTED: ${channelInfo.name} - filtering`);
                 return true;
             }
         }
         
-        const { viewsText, durationText } = extractVideoData(element);
+        const { viewsText, durationText, isLive } = extractVideoData(element);
+        
+        // Check if we should filter all live streams
+        if (CONFIG.FILTER_ALL_LIVE_STREAMS && isLive) {
+            log('🚫 FILTER_ALL_LIVE_STREAMS enabled - filtering live stream');
+            return true;
+        }
+        
+        // Check if we should skip live streams (opposite behavior)
+        if (isLive && CONFIG.SKIP_LIVE_STREAMS) {
+            return false;
+        }
+        
+        // Check if we should filter all shorts
+        if (CONFIG.FILTER_ALL_SHORTS) {
+            // Multiple detection strategies for Shorts:
+            // 1. Check if element is or contains a reel item renderer
+            const isReelRenderer = element.tagName.toLowerCase() === 'ytd-reel-item-renderer' || 
+                                   element.closest('ytd-reel-item-renderer') !== null;
+            
+            // 2. Check if we're on the /shorts/ page
+            const isOnShortsPage = window.location.pathname.includes('/shorts/');
+            
+            // 3. Check for shorts-specific thumbnail overlay or badges
+            const hasShortsIndicator = element.querySelector('[overlay-style="SHORTS"]') !== null ||
+                                      element.querySelector('.ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]') !== null ||
+                                      element.querySelector('ytd-thumbnail-overlay-time-status-renderer[aria-label*="Shorts"]') !== null ||
+                                      element.querySelector('[aria-label*="Short"]') !== null;
+            
+            // 4. Check if the video link contains '/shorts/'
+            const videoLink = element.querySelector('a[href*="/shorts/"]');
+            const hasShortsURL = videoLink !== null;
+            
+            const isShort = isReelRenderer || isOnShortsPage || hasShortsIndicator || hasShortsURL;
+            
+            if (isShort) {
+                log('🚫 FILTER_ALL_SHORTS enabled - filtering short (detected via: ' + 
+                    (isReelRenderer ? 'reel-renderer ' : '') +
+                    (isOnShortsPage ? 'shorts-page ' : '') +
+                    (hasShortsIndicator ? 'shorts-indicator ' : '') +
+                    (hasShortsURL ? 'shorts-url' : '') + ')');
+                return true;
+            }
+        }
+        
         log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
 
         // Skip if missing critical data
@@ -313,7 +555,6 @@
 
         let shouldFilter = false;
         if (CONFIG.FILTER_MODE === 'OR') {
-            // OR mode: filter if EITHER condition is true
             shouldFilter = viewsLow || durationShort;
             if (shouldFilter) {
                 const reason = [];
@@ -322,19 +563,16 @@
                 log(`🚫 FILTERING (OR mode): ${reason.join(' OR ')}`);
             }
         } else {
-            // AND mode: filter if BOTH conditions are true (or only one is applicable)
+            // AND mode: require both to be below threshold to filter when both values exist
             if (viewsText && durationText) {
-                // Both metrics present: require both to be low
                 shouldFilter = viewsLow && durationShort;
                 if (shouldFilter) {
                     log(`🚫 FILTERING (AND mode): ${viewCount} views < ${CONFIG.MIN_VIEWS} AND ${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
                 }
             } else if (viewsText) {
-                // Only views: check views
                 shouldFilter = viewsLow;
                 if (shouldFilter) log(`🚫 FILTERING (AND mode - views only): ${viewCount} views < ${CONFIG.MIN_VIEWS}`);
             } else if (durationText) {
-                // Only duration: check duration
                 shouldFilter = durationShort;
                 if (shouldFilter) log(`🚫 FILTERING (AND mode - duration only): ${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
             }
@@ -360,7 +598,8 @@
             'ytd-playlist-video-renderer',
             'ytd-reel-item-renderer',  // YouTube Shorts
             'ytd-rich-grid-media',     // Grid layout
-            'ytd-rich-shelf-renderer'  // Shelf items
+            'ytd-rich-shelf-renderer', // Shelf items
+            'yt-lockup-view-model'     // New 2025 lockup cards
         ];
 
         log('🔍 Looking for container to remove from element:', element.tagName);
@@ -378,7 +617,7 @@
         log('⚠️ Standard selectors failed, attempting fallback parent traversal');
         let parent = element.parentElement;
         let depth = 0;
-        while (parent && depth < 10) {
+        while (parent && depth < CONSTANTS.PARENT_TRAVERSAL_MAX_DEPTH) {
             const tagName = parent.tagName.toLowerCase();
             const classList = parent.className;
             
@@ -404,10 +643,13 @@
         
         log('🗑️ Attempting to remove container:', container.tagName, 'ID:', container.id);
         
-        if (CONFIG.SMOOTH_REMOVAL) {
-            container.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out, max-height 0.3s ease-out';
+        const reduceMotion = prefersReducedMotion();
+        if (CONFIG.SMOOTH_REMOVAL && !reduceMotion) {
+            const dur = CONFIG.REMOVAL_DURATION_MS;
+            const scale = CONFIG.REMOVAL_SCALE;
+            container.style.transition = `opacity ${dur}ms ease-out, transform ${dur}ms ease-out, max-height ${dur}ms ease-out`;
             container.style.opacity = '0';
-            container.style.transform = 'scale(0.95)';
+            container.style.transform = `scale(${scale})`;
             container.style.maxHeight = container.offsetHeight + 'px';
             
             setTimeout(() => {
@@ -418,8 +660,8 @@
                 setTimeout(() => {
                     log('✅ Container removed from DOM');
                     container.remove();
-                }, 300);
-            }, 300);
+                }, dur);
+            }, dur);
         } else {
             container.remove();
             log('✅ Container removed from DOM (instant)');
@@ -436,63 +678,61 @@
         updateCounter();
     };
 
-    /**
-     * Process video elements on the page
-     */
-    const filterVideos = () => {
-        // Universal selectors for all YouTube video types
-        const videoSelectors = [
-            'ytd-rich-item-renderer',
-            'ytd-video-renderer',
-            'ytd-grid-video-renderer',
-            'ytd-compact-video-renderer',
-            'ytd-playlist-video-renderer'
-        ];
+    const processVideoElement = (video) => {
+        if (!video || !(video instanceof HTMLElement)) return false;
+        if (state.processedVideos.has(video)) return false;
+        state.processedVideos.add(video);
 
+        log('Processing video element:', video.tagName);
+        if (shouldFilterVideo(video)) {
+            removeVideoElement(video);
+        }
+        return true;
+    };
+
+    const processCandidates = (nodes) => {
+        if (!nodes || nodes.length === 0) return;
         let processed = 0;
-        
-        videoSelectors.forEach(selector => {
-            const videos = document.querySelectorAll(selector);
-            
-            videos.forEach(video => {
-                if (state.processedVideos.has(video)) return;
-                
-                state.processedVideos.add(video);
-                processed++;
-                
-                log('Processing video element:', video.tagName);
-                if (shouldFilterVideo(video)) {
-                    removeVideoElement(video);
-                }
+
+        nodes.forEach(node => {
+            if (!(node instanceof HTMLElement)) return;
+
+            if (VIDEO_SELECTORS.some(sel => node.matches(sel))) {
+                if (processVideoElement(node)) processed++;
+            }
+
+            const found = node.querySelectorAll(CACHED_SELECTORS.videoSelector);
+            found.forEach(el => {
+                if (processVideoElement(el)) processed++;
             });
         });
 
         state.totalProcessed += processed;
-        log(`Processed ${processed} videos, Total: ${state.totalProcessed}`);
+        if (processed > 0) {
+            log(`Processed ${processed} videos, Total: ${state.totalProcessed}`);
+        }
+    };
+
+    /**
+     * Process video elements on the page
+     */
+    const filterVideos = () => {
+        const allVideos = document.querySelectorAll(CACHED_SELECTORS.videoSelector);
+        processCandidates(Array.from(allVideos));
     };
 
     // ==================== UI COUNTER ====================
 
     /**
-     * Create counter display element
+     * Create counter header with title and control buttons
      */
-    const createCounter = () => {
-        if (state.counterElement) {
-            return state.counterElement;
-        }
-
-        const counter = document.createElement('div');
-        counter.id = 'yt-filter-counter';
-        
-        const daysSinceInstall = Math.floor((Date.now() - state.lifetimeStats.firstInstall) / (1000 * 60 * 60 * 24));
-        
-        // Build counter DOM manually (Trusted Types compatible)
+    const createCounterHeader = () => {
         const header = document.createElement('div');
         header.className = 'yt-filter-header';
         
         const title = document.createElement('span');
         title.className = 'yt-filter-title';
-        title.textContent = '🔥 YT Filter Pro';
+        title.textContent = '🔥 or1n YT filter';
         
         const buttons = document.createElement('div');
         buttons.className = 'yt-filter-buttons';
@@ -524,8 +764,17 @@
         header.appendChild(title);
         header.appendChild(buttons);
         
+        return { header, settingsBtn, toggleBtn, menuBtn, closeBtn };
+    };
+
+    /**
+     * Create counter statistics display
+     */
+    const createCounterStats = () => {
         const stats = document.createElement('div');
         stats.className = 'yt-filter-stats';
+        
+        const daysSinceInstall = Math.floor((Date.now() - state.lifetimeStats.firstInstall) / (1000 * 60 * 60 * 24));
         
         // Session stat
         const sessionStat = document.createElement('div');
@@ -575,24 +824,20 @@
         filterInfo.appendChild(minDurationText);
         stats.appendChild(filterInfo);
         
-        counter.appendChild(header);
-        counter.appendChild(stats);
+        return stats;
+    };
 
-        // Apply theme and font settings
-        applyCounterStyle(counter);
-
-        // Quick menu (hidden by default)
-        const quickMenu = document.createElement('div');
-        quickMenu.className = 'yt-filter-quick-menu';
-        quickMenu.style.display = 'none';
-        
+    /**
+     * Create quick menu items
+     */
+    const createQuickMenuItems = () => {
         const menuItems = [
-            { text: '👁️ Toggle Counter', action: () => {
+            { text: '👁️ Toggle Counter', action: (stats, toggleBtn) => {
                 const isHidden = stats.style.display === 'none';
                 stats.style.display = isHidden ? 'block' : 'none';
                 toggleBtn.textContent = isHidden ? '−' : '+';
             }},
-            { text: '🚫 Close Counter', action: () => {
+            { text: '🚫 Close Counter', action: (stats, toggleBtn, counter) => {
                 counter.style.transition = 'opacity 0.3s ease';
                 counter.style.opacity = '0';
                 setTimeout(() => {
@@ -601,11 +846,17 @@
                 }, 300);
             }},
             { text: '📈 Reset Stats', action: () => {
-                if (confirm('Reset all statistics? Cannot be undone.')) {
+                confirmAction('Reset all statistics?', () => {
                     state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
                     saveStats();
                     showNotification('✓ Statistics reset', 1500);
-                }
+                });
+            }},
+            { getText: () => `${CONFIG.SKIP_LIVE_STREAMS ? '🔴 Ignore LIVE (ON)' : '🔴 Ignore LIVE (OFF)'}` , action: () => {
+                updateConfig({ SKIP_LIVE_STREAMS: !CONFIG.SKIP_LIVE_STREAMS });
+                state.processedVideos = new WeakSet();
+                filterVideos();
+                showNotification(CONFIG.SKIP_LIVE_STREAMS ? 'LIVE videos will be skipped' : 'LIVE videos will be filtered');
             }},
             { text: '🔄 Force Filter', action: () => {
                 state.processedVideos = new WeakSet();
@@ -615,39 +866,134 @@
         ];
         
         // Get current channel for whitelist/blacklist options
-        const currentVideo = counter.closest('body').querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
-        if (currentVideo) {
-            const channelInfo = extractChannelInfo(currentVideo);
-            if (channelInfo) {
-                menuItems.push(
-                    { text: `✅ Whitelist "${channelInfo.name.substring(0, 20)}"`, action: () => {
-                        if (!CONFIG.WHITELIST.includes(channelInfo.id)) {
-                            CONFIG.WHITELIST.push(channelInfo.id);
-                            saveConfig(CONFIG);
-                            showNotification(`✅ Whitelisted: ${channelInfo.name}`, 2000);
-                        } else {
-                            showNotification(`Already whitelisted`, 1500);
-                        }
-                    }},
-                    { text: `🚫 Blacklist "${channelInfo.name.substring(0, 20)}"`, action: () => {
-                        if (!CONFIG.BLACKLIST.includes(channelInfo.id)) {
-                            CONFIG.BLACKLIST.push(channelInfo.id);
-                            saveConfig(CONFIG);
-                            showNotification(`🚫 Blacklisted: ${channelInfo.name}`, 2000);
-                        } else {
-                            showNotification(`Already blacklisted`, 1500);
-                        }
-                    }}
-                );
+        const root = document.body || document.documentElement;
+        if (root) {
+            const currentVideo = root.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
+            if (currentVideo) {
+                const channelInfo = extractChannelInfo(currentVideo);
+                if (channelInfo) {
+                    menuItems.push(
+                        { text: `✅ Whitelist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                            if (!listContains(CONFIG.WHITELIST, channelInfo.id)) {
+                                CONFIG.WHITELIST.push(channelInfo.id);
+                                updateConfig({ WHITELIST: CONFIG.WHITELIST });
+                                showNotification(`✅ Whitelisted: ${channelInfo.name}`, 2000);
+                            } else {
+                                showNotification(`Already whitelisted`, 1500);
+                            }
+                        }},
+                        { text: `🚫 Blacklist "${channelInfo.name.substring(0, 20)}"`, action: () => {
+                            if (!listContains(CONFIG.BLACKLIST, channelInfo.id)) {
+                                CONFIG.BLACKLIST.push(channelInfo.id);
+                                updateConfig({ BLACKLIST: CONFIG.BLACKLIST });
+                                showNotification(`🚫 Blacklisted: ${channelInfo.name}`, 2000);
+                            } else {
+                                showNotification(`Already blacklisted`, 1500);
+                            }
+                        }}
+                    );
+                }
             }
         }
+        
+        return menuItems;
+    };
+
+    /**
+     * Attach event handlers to counter buttons
+     */
+    const attachCounterEventHandlers = (counter, header, stats, buttons, quickMenu) => {
+        const { settingsBtn, toggleBtn, menuBtn, closeBtn } = buttons;
+        
+        // Settings button
+        settingsBtn._handler = (e) => {
+            e.stopPropagation();
+            quickMenu.style.display = 'none';
+            toggleSettingsPanel();
+        };
+        settingsBtn.addEventListener('click', settingsBtn._handler);
+
+        // Toggle visibility
+        toggleBtn._handler = (e) => {
+            e.stopPropagation();
+            const isHidden = stats.style.display === 'none';
+            stats.style.display = isHidden ? 'block' : 'none';
+            toggleBtn.textContent = isHidden ? '−' : '+';
+            toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
+            quickMenu.style.display = 'none';
+        };
+        toggleBtn.addEventListener('click', toggleBtn._handler);
+
+        // Menu button
+        menuBtn._handler = (e) => {
+            e.stopPropagation();
+            quickMenu.style.display = quickMenu.style.display === 'none' ? 'flex' : 'none';
+        };
+        menuBtn.addEventListener('click', menuBtn._handler);
+
+        // Close button
+        const closeCounter = (e) => {
+            e.stopPropagation();
+            if (counter) {
+                counter.style.transition = `opacity ${CONSTANTS.COUNTER_FADE_DURATION_MS}ms ease`;
+                counter.style.opacity = '0';
+                setTimeout(() => {
+                    settingsBtn.removeEventListener('click', settingsBtn._handler);
+                    toggleBtn.removeEventListener('click', toggleBtn._handler);
+                    menuBtn.removeEventListener('click', menuBtn._handler);
+                    closeBtn.removeEventListener('click', closeCounter);
+                    if (header && CONFIG.COUNTER_DRAGGABLE) {
+                        header.onmousedown = null;
+                    }
+                    counter.remove();
+                    state.counterElement = null;
+                }, CONSTANTS.COUNTER_FADE_DURATION_MS);
+            }
+        };
+        closeBtn.addEventListener('click', closeCounter);
+    };
+
+    /**
+     * Create counter display element
+     */
+    const createCounter = () => {
+        if (state.counterElement) {
+            return state.counterElement;
+        }
+
+        const counter = document.createElement('div');
+        counter.id = 'yt-filter-counter';
+        
+        // Create components
+        const { header, settingsBtn, toggleBtn, menuBtn, closeBtn } = createCounterHeader();
+        const stats = createCounterStats();
+        counter.appendChild(header);
+        counter.appendChild(stats);
+        applyCounterStyle(counter);
+
+        // Create quick menu
+        const quickMenu = document.createElement('div');
+        quickMenu.className = 'yt-filter-quick-menu';
+        quickMenu.style.display = 'none';
+        
+        const menuItems = createQuickMenuItems();
         menuItems.forEach(item => {
             const menuItem = document.createElement('button');
             menuItem.className = 'yt-filter-menu-item';
-            menuItem.textContent = item.text;
+            menuItem.textContent = item.getText ? item.getText() : item.text;
             menuItem.addEventListener('click', (e) => {
                 e.stopPropagation();
-                item.action();
+                // Pass necessary context to actions that need it
+                if (item.text === '👁️ Toggle Counter') {
+                    item.action(stats, toggleBtn);
+                } else if (item.text === '🚫 Close Counter') {
+                    item.action(stats, toggleBtn, counter);
+                } else {
+                    item.action();
+                }
+                if (item.getText) {
+                    menuItem.textContent = item.getText();
+                }
                 quickMenu.style.display = 'none';
             });
             quickMenu.appendChild(menuItem);
@@ -655,42 +1001,9 @@
         
         counter.appendChild(quickMenu);
 
-        // Settings button
-        settingsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            quickMenu.style.display = 'none';
-            toggleSettingsPanel();
-        });
-
-        // Toggle visibility
-        const statsDiv = stats;
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isHidden = statsDiv.style.display === 'none';
-            statsDiv.style.display = isHidden ? 'block' : 'none';
-            toggleBtn.textContent = isHidden ? '−' : '+';
-            toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
-            quickMenu.style.display = 'none';
-        });
-
-        // Menu button
-        menuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            quickMenu.style.display = quickMenu.style.display === 'none' ? 'flex' : 'none';
-        });
-
-        // Close button - completely hides and closes the counter
-        closeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (counter) {
-                counter.style.transition = 'opacity 0.3s ease';
-                counter.style.opacity = '0';
-                setTimeout(() => {
-                    counter.remove();
-                    state.counterElement = null;
-                }, 300);
-            }
-        });
+        // Attach event handlers
+        attachCounterEventHandlers(counter, header, stats, 
+            { settingsBtn, toggleBtn, menuBtn, closeBtn }, quickMenu);
 
         // Make draggable
         if (CONFIG.COUNTER_DRAGGABLE) {
@@ -713,14 +1026,15 @@
         if (sessionElement) {
             sessionElement.textContent = state.sessionFiltered.toLocaleString();
             
-            // Pulse animation on update
-            sessionElement.style.transform = 'scale(1.3)';
-            const accentColor = CONFIG.THEME === 'dark' ? '#ff0000' : '#cc0000';
-            sessionElement.style.color = accentColor;
-            setTimeout(() => {
-                sessionElement.style.transform = 'scale(1)';
-                sessionElement.style.color = '';
-            }, 200);
+            if (!prefersReducedMotion()) {
+                sessionElement.style.transform = `scale(${CONFIG.COUNTER_PULSE_SCALE})`;
+                const accentColor = CONFIG.THEME === 'dark' ? '#ff0000' : '#cc0000';
+                sessionElement.style.color = accentColor;
+                setTimeout(() => {
+                    sessionElement.style.transform = 'scale(1)';
+                    sessionElement.style.color = '';
+                }, CONFIG.COUNTER_PULSE_DURATION_MS);
+            }
         }
 
         const lifetimeElement = state.counterElement.querySelector('#yt-lifetime-count');
@@ -740,57 +1054,132 @@
     };
 
     /**
-     * Make element draggable
+     * Make element draggable with position persistence
      */
     const makeDraggable = (element) => {
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
         const header = element.querySelector('.yt-filter-header');
         
+        // Restore saved position
+        if (state.counterPosition) {
+            element.style.top = state.counterPosition.top;
+            element.style.left = state.counterPosition.left;
+        }
+        
         if (header) {
             header.style.cursor = 'move';
             header.onmousedown = dragMouseDown;
+            header.addEventListener('touchstart', dragTouchStart, { passive: false });
+        }
+
+        function getPoint(event) {
+            if (event.touches && event.touches.length > 0) {
+                return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
+            }
+            return { clientX: event.clientX, clientY: event.clientY };
         }
 
         function dragMouseDown(e) {
             e.preventDefault();
-            pos3 = e.clientX;
-            pos4 = e.clientY;
+            const point = getPoint(e);
+            pos3 = point.clientX;
+            pos4 = point.clientY;
             document.onmouseup = closeDragElement;
             document.onmousemove = elementDrag;
         }
 
+        function dragTouchStart(e) {
+            e.preventDefault();
+            const point = getPoint(e);
+            pos3 = point.clientX;
+            pos4 = point.clientY;
+            document.addEventListener('touchend', closeDragElement, { passive: true });
+            document.addEventListener('touchcancel', closeDragElement, { passive: true });
+            document.addEventListener('touchmove', elementDrag, { passive: false });
+        }
+
         function elementDrag(e) {
             e.preventDefault();
-            pos1 = pos3 - e.clientX;
-            pos2 = pos4 - e.clientY;
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-            element.style.top = (element.offsetTop - pos2) + 'px';
-            element.style.left = (element.offsetLeft - pos1) + 'px';
+            const point = getPoint(e);
+            pos1 = pos3 - point.clientX;
+            pos2 = pos4 - point.clientY;
+            pos3 = point.clientX;
+            pos4 = point.clientY;
+            const newTop = (element.offsetTop - pos2) + 'px';
+            const newLeft = (element.offsetLeft - pos1) + 'px';
+            element.style.top = newTop;
+            element.style.left = newLeft;
         }
 
         function closeDragElement() {
             document.onmouseup = null;
             document.onmousemove = null;
+            document.removeEventListener('touchmove', elementDrag);
+            document.removeEventListener('touchend', closeDragElement);
+            document.removeEventListener('touchcancel', closeDragElement);
+            
+            // Save position
+            state.counterPosition = {
+                top: element.style.top,
+                left: element.style.left
+            };
+            GM_setValue('counterPosition', state.counterPosition);
         }
     };
 
     /**
-     * Show notification
+     * Show notification with queue system to prevent stacking
      */
-    const showNotification = (message, duration = 3000) => {
+    const showNotification = (message, duration = CONFIG.NOTIFICATION_DURATION_MS) => {
+        try {
+            if (!CONFIG.SHOW_NOTIFICATIONS) return;
+
+            // Add to queue
+            state.notificationQueue.push({ message, duration });
+
+            // Process queue if not already showing
+            if (!state.isShowingNotification) {
+                processNotificationQueue();
+            }
+        } catch (e) {
+            log('❌ Error showing notification:', e);
+        }
+    };
+
+    const processNotificationQueue = () => {
+        if (state.notificationQueue.length === 0) {
+            state.isShowingNotification = false;
+            return;
+        }
+
+        state.isShowingNotification = true;
+        const { message, duration } = state.notificationQueue.shift();
+
         const notification = document.createElement('div');
         notification.className = 'yt-filter-notification';
         notification.textContent = message;
         document.body.appendChild(notification);
+        const reduceMotion = prefersReducedMotion();
+
+        if (reduceMotion) {
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.remove();
+                processNotificationQueue();
+            }, duration);
+            return;
+        }
 
         setTimeout(() => {
             notification.classList.add('show');
-        }, 10);
+        }, CONSTANTS.NOTIFICATION_FADE_DELAY_MS);
 
         setTimeout(() => {
             notification.classList.remove('show');
-            setTimeout(() => notification.remove(), 300);
+            setTimeout(() => {
+                notification.remove();
+                processNotificationQueue();
+            }, CONFIG.NOTIFICATION_FADE_MS);
         }, duration);
     };
 
@@ -859,14 +1248,19 @@
 
         // === FILTER SETTINGS ===
         const filterSection = createSection('🎯 Filter Settings');
-        filterSection.appendChild(createInputRow('Minimum Views', 'number', 'setting-min-views', CONFIG.MIN_VIEWS, 0, null, 1000));
-        filterSection.appendChild(createInputRow('Minimum Duration (seconds)', 'number', 'setting-min-duration', CONFIG.MIN_DURATION_SECONDS, 0, null, 30));
+        const minViewsRow = createInputRow('Minimum Views', 'number', 'setting-min-views', CONFIG.MIN_VIEWS, 0, null, 1000);
+        minViewsRow.title = 'Videos with fewer views than this will be hidden. Set to 0 to disable view filtering.';
+        filterSection.appendChild(minViewsRow);
+        const minDurRow = createInputRow('Minimum Duration (seconds)', 'number', 'setting-min-duration', CONFIG.MIN_DURATION_SECONDS, 0, null, 30);
+        minDurRow.title = 'Videos shorter than this (in seconds) will be hidden. 240s = 4 minutes. Set to 0 to disable duration filtering.';
+        filterSection.appendChild(minDurRow);
         body.appendChild(filterSection);
 
         // === FILTER MODE ===
         const modeSection = createSection('⚡ Filter Logic');
         const modeItem = document.createElement('div');
         modeItem.className = 'setting-item';
+        modeItem.title = 'AND: hide only when BOTH view count AND duration are below thresholds. OR: hide if EITHER is below threshold.';
         const modeLbl = document.createElement('label');
         modeLbl.textContent = 'Combine Filters With:';
         const modeSelect = document.createElement('select');
@@ -881,7 +1275,7 @@
         modeItem.appendChild(modeLbl);
         modeItem.appendChild(modeSelect);
         const modeInfo = document.createElement('small');
-        modeInfo.textContent = 'AND: filters only if BOTH view count AND duration are below thresholds. OR: filters if EITHER is below threshold.';
+        modeInfo.textContent = 'AND: hide only when both views and duration are below thresholds. OR: hide when either views or duration is below its threshold.';
         modeItem.appendChild(modeInfo);
         modeSection.appendChild(modeItem);
         body.appendChild(modeSection);
@@ -890,6 +1284,7 @@
         const whitelistSection = createSection('✅ Whitelist (Never Filter)');
         const whitelistToggle = document.createElement('div');
         whitelistToggle.className = 'setting-item';
+        whitelistToggle.title = 'When enabled, channels in the whitelist will never be filtered regardless of views or duration.';
         const whitelistCb = document.createElement('input');
         whitelistCb.type = 'checkbox';
         whitelistCb.id = 'setting-enable-whitelist';
@@ -906,7 +1301,9 @@
         CONFIG.WHITELIST.forEach(channel => {
             const item = document.createElement('div');
             item.className = 'list-item';
-            item.innerHTML = `<span>${channel.replace(/^channel\/|^@/, '')}</span>`;
+            const span = document.createElement('span');
+            span.textContent = normalizeChannelName(channel);
+            item.appendChild(span);
             const removeBtn = document.createElement('button');
             removeBtn.className = 'btn-remove-item';
             removeBtn.textContent = '✕';
@@ -925,6 +1322,7 @@
         const blacklistSection = createSection('🚫 Blacklist (Always Filter)');
         const blacklistToggle = document.createElement('div');
         blacklistToggle.className = 'setting-item';
+        blacklistToggle.title = 'When enabled, channels in the blacklist will always be filtered regardless of views or duration.';
         const blacklistCb = document.createElement('input');
         blacklistCb.type = 'checkbox';
         blacklistCb.id = 'setting-enable-blacklist';
@@ -941,7 +1339,9 @@
         CONFIG.BLACKLIST.forEach(channel => {
             const item = document.createElement('div');
             item.className = 'list-item';
-            item.innerHTML = `<span>${channel.replace(/^channel\/|^@/, '')}</span>`;
+            const span = document.createElement('span');
+            span.textContent = normalizeChannelName(channel);
+            item.appendChild(span);
             const removeBtn = document.createElement('button');
             removeBtn.className = 'btn-remove-item';
             removeBtn.textContent = '✕';
@@ -962,6 +1362,7 @@
         // Theme select
         const themeItem = document.createElement('div');
         themeItem.className = 'setting-item';
+        themeItem.title = 'Choose between dark mode (better for night) or light mode (better for bright environments).';
         const themeLbl = document.createElement('label');
         themeLbl.textContent = 'Theme';
         const themeSelect = document.createElement('select');
@@ -980,6 +1381,7 @@
         // Font family select
         const fontItem = document.createElement('div');
         fontItem.className = 'setting-item';
+        fontItem.title = 'Choose the typeface for the counter and UI text.';
         const fontLbl = document.createElement('label');
         fontLbl.textContent = 'Font Family';
         const fontSelect = document.createElement('select');
@@ -998,6 +1400,7 @@
         // Font size slider
         const fontSizeItem = document.createElement('div');
         fontSizeItem.className = 'setting-item';
+        fontSizeItem.title = 'Adjust the text size in pixels (10-20px). Larger values make text easier to read.';
         const fontSizeLbl = document.createElement('label');
         fontSizeLbl.textContent = 'Font Size';
         const fontSizeSlider = document.createElement('input');
@@ -1020,6 +1423,7 @@
         // Font weight select
         const fontWeightItem = document.createElement('div');
         fontWeightItem.className = 'setting-item';
+        fontWeightItem.title = 'Control text thickness: Normal, Bold, Light, or Semi-Bold.';
         const fontWeightLbl = document.createElement('label');
         fontWeightLbl.textContent = 'Font Weight';
         const fontWeightSelect = document.createElement('select');
@@ -1038,6 +1442,7 @@
         // Opacity slider
         const opacityItem = document.createElement('div');
         opacityItem.className = 'setting-item';
+        opacityItem.title = 'Counter transparency (50-100%). Higher values make it more visible, lower values make it more subtle.';
         const opacityLbl = document.createElement('label');
         opacityLbl.textContent = 'Counter Opacity';
         const opacitySlider = document.createElement('input');
@@ -1063,6 +1468,7 @@
         const shortcutSection = createSection('⌨️ Keyboard Shortcut');
         const shortcutItem = document.createElement('div');
         shortcutItem.className = 'setting-item';
+        shortcutItem.title = 'Configure keyboard shortcut to show/hide the counter. Example: Ctrl+F to toggle.';
         const shortcutLbl = document.createElement('label');
         shortcutLbl.textContent = 'Toggle Counter Visibility';
         shortcutItem.appendChild(shortcutLbl);
@@ -1090,6 +1496,33 @@
         });
         shortcutDiv.appendChild(keySelect);
         shortcutItem.appendChild(shortcutDiv);
+        
+        // Add conflict detection display
+        const conflictWarning = document.createElement('div');
+        conflictWarning.id = 'shortcut-conflict-warning';
+        conflictWarning.style.cssText = 'margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 12px; display: none;';
+        shortcutItem.appendChild(conflictWarning);
+        
+        // Check for conflicts on load and input change
+        const checkConflicts = () => {
+            const result = detectShortcutConflicts();
+            if (result.hasConflicts) {
+                const conflict = result.conflicts[0];
+                conflictWarning.style.display = 'block';
+                conflictWarning.style.backgroundColor = conflict.severity === 'high' ? 'rgba(255, 0, 0, 0.15)' : 'rgba(255, 165, 0, 0.15)';
+                conflictWarning.style.borderLeft = `3px solid ${conflict.severity === 'high' ? '#ff0000' : '#ffa500'}`;
+                conflictWarning.textContent = `⚠️ ${conflict.message}. ${conflict.suggestion}.`;
+            } else {
+                conflictWarning.style.display = 'none';
+            }
+        };
+        
+        checkConflicts();
+        ['ctrl', 'alt', 'shift'].forEach(mod => {
+            document.querySelector(`#shortcut-${mod}`)?.addEventListener('change', checkConflicts);
+        });
+        keySelect.addEventListener('change', checkConflicts);
+        
         shortcutSection.appendChild(shortcutItem);
         body.appendChild(shortcutSection);
 
@@ -1097,6 +1530,7 @@
         const statsSection = createSection('📊 Statistics');
         const enableStatsItem = document.createElement('div');
         enableStatsItem.className = 'setting-item';
+        enableStatsItem.title = 'Track total filtered videos across all browsing sessions. Stored locally in your browser.';
         const enableStatsCb = document.createElement('input');
         enableStatsCb.type = 'checkbox';
         enableStatsCb.id = 'setting-enable-stats';
@@ -1109,6 +1543,7 @@
 
         const notifItem = document.createElement('div');
         notifItem.className = 'setting-item';
+        notifItem.title = 'Display toast notifications when actions are performed (e.g., settings saved, channel added to list).';
         const notifCb = document.createElement('input');
         notifCb.type = 'checkbox';
         notifCb.id = 'setting-show-notifications';
@@ -1129,12 +1564,12 @@
         resetStatsBtn.className = 'btn-reset-stats';
         resetStatsBtn.textContent = 'Reset Statistics';
         resetStatsBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to reset all statistics? This cannot be undone.')) {
+            confirmAction('Reset all statistics?', () => {
                 state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
                 saveStats();
                 showNotification('✓ Statistics reset successfully');
                 setTimeout(() => toggleSettingsPanel(), 500);
-            }
+            });
         });
         statsDisplay.appendChild(resetStatsBtn);
         statsSection.appendChild(statsDisplay);
@@ -1144,6 +1579,7 @@
         const advSection = createSection('🔧 Advanced');
         const smoothItem = document.createElement('div');
         smoothItem.className = 'setting-item';
+        smoothItem.title = 'Animate filtered videos with fade-out and scale effects. Disable for instant removal (faster but less smooth).';
         const smoothCb = document.createElement('input');
         smoothCb.type = 'checkbox';
         smoothCb.id = 'setting-smooth-removal';
@@ -1156,6 +1592,7 @@
 
         const dragItem = document.createElement('div');
         dragItem.className = 'setting-item';
+        dragItem.title = 'Allow moving the counter by clicking and dragging its header. Works with mouse and touch.';
         const dragCb = document.createElement('input');
         dragCb.type = 'checkbox';
         dragCb.id = 'setting-draggable';
@@ -1166,8 +1603,61 @@
         dragItem.appendChild(dragLbl);
         advSection.appendChild(dragItem);
 
+        const liveItem = document.createElement('div');
+        liveItem.className = 'setting-item';
+        liveItem.title = 'When enabled, currently streaming LIVE videos will never be filtered regardless of view count or duration.';
+        const liveCb = document.createElement('input');
+        liveCb.type = 'checkbox';
+        liveCb.id = 'setting-skip-live';
+        liveCb.checked = CONFIG.SKIP_LIVE_STREAMS;
+        const liveLbl = document.createElement('label');
+        liveLbl.appendChild(liveCb);
+        liveLbl.appendChild(document.createTextNode(' Do not filter LIVE videos'));
+        liveItem.appendChild(liveLbl);
+        advSection.appendChild(liveItem);
+
+        const ciItem = document.createElement('div');
+        ciItem.className = 'setting-item';
+        ciItem.title = 'Ignore uppercase/lowercase differences when matching channel names. "TechChannel" will match "techchannel".';
+        const ciCb = document.createElement('input');
+        ciCb.type = 'checkbox';
+        ciCb.id = 'setting-case-insensitive';
+        ciCb.checked = CONFIG.CASE_INSENSITIVE_LISTS;
+        const ciLbl = document.createElement('label');
+        ciLbl.appendChild(ciCb);
+        ciLbl.appendChild(document.createTextNode(' Case-insensitive whitelist/blacklist matching'));
+        ciItem.appendChild(ciLbl);
+        advSection.appendChild(ciItem);
+
+        const filterAllLiveItem = document.createElement('div');
+        filterAllLiveItem.className = 'setting-item';
+        filterAllLiveItem.title = 'Hide ALL live streaming videos regardless of view count or duration. Overrides "Do not filter LIVE videos" setting.';
+        const filterAllLiveCb = document.createElement('input');
+        filterAllLiveCb.type = 'checkbox';
+        filterAllLiveCb.id = 'setting-filter-all-live';
+        filterAllLiveCb.checked = CONFIG.FILTER_ALL_LIVE_STREAMS;
+        const filterAllLiveLbl = document.createElement('label');
+        filterAllLiveLbl.appendChild(filterAllLiveCb);
+        filterAllLiveLbl.appendChild(document.createTextNode(' Filter ALL LIVE streams'));
+        filterAllLiveItem.appendChild(filterAllLiveLbl);
+        advSection.appendChild(filterAllLiveItem);
+
+        const filterAllShortsItem = document.createElement('div');
+        filterAllShortsItem.className = 'setting-item';
+        filterAllShortsItem.title = 'Hide ALL YouTube Shorts regardless of view count or duration.';
+        const filterAllShortsCb = document.createElement('input');
+        filterAllShortsCb.type = 'checkbox';
+        filterAllShortsCb.id = 'setting-filter-all-shorts';
+        filterAllShortsCb.checked = CONFIG.FILTER_ALL_SHORTS;
+        const filterAllShortsLbl = document.createElement('label');
+        filterAllShortsLbl.appendChild(filterAllShortsCb);
+        filterAllShortsLbl.appendChild(document.createTextNode(' Filter ALL Shorts'));
+        filterAllShortsItem.appendChild(filterAllShortsLbl);
+        advSection.appendChild(filterAllShortsItem);
+
         const debugItem = document.createElement('div');
         debugItem.className = 'setting-item';
+        debugItem.title = 'Log detailed filtering information to browser console. Useful for troubleshooting issues.';
         const debugCb = document.createElement('input');
         debugCb.type = 'checkbox';
         debugCb.id = 'setting-debug';
@@ -1178,6 +1668,31 @@
         debugItem.appendChild(debugLbl);
         advSection.appendChild(debugItem);
 
+        const animHeader = document.createElement('h4');
+        animHeader.textContent = 'Animation Timings (ms / scale)';
+        animHeader.title = 'Fine-tune animation speeds and effects. Lower durations = faster animations. Requires "Smooth Removal" enabled.';
+        advSection.appendChild(animHeader);
+
+        const removalTime = createInputRow('Removal Duration (ms)', 'number', 'setting-removal-duration', CONFIG.REMOVAL_DURATION_MS, 50, 5000, 50);
+        removalTime.title = 'How long (in milliseconds) the fade-out animation takes when removing videos. 300ms = 0.3 seconds.';
+        const removalScale = createInputRow('Removal Scale', 'number', 'setting-removal-scale', CONFIG.REMOVAL_SCALE, 0.5, 1, 0.01);
+        removalScale.title = 'Scale factor during removal animation. 0.95 = shrink to 95%. Lower values = more dramatic shrink effect.';
+        const notifDur = createInputRow('Notification Duration (ms)', 'number', 'setting-notification-duration', CONFIG.NOTIFICATION_DURATION_MS, 500, 10000, 100);
+        notifDur.title = 'How long toast notifications stay visible before fading. 3000ms = 3 seconds.';
+        const notifFade = createInputRow('Notification Fade (ms)', 'number', 'setting-notification-fade', CONFIG.NOTIFICATION_FADE_MS, 50, 2000, 50);
+        notifFade.title = 'Duration of notification fade-in/fade-out animation. 300ms = 0.3 seconds.';
+        const pulseDur = createInputRow('Counter Pulse Duration (ms)', 'number', 'setting-pulse-duration', CONFIG.COUNTER_PULSE_DURATION_MS, 50, 2000, 50);
+        pulseDur.title = 'How long the counter number pulses/scales when stats update. 200ms = 0.2 seconds.';
+        const pulseScale = createInputRow('Counter Pulse Scale', 'number', 'setting-pulse-scale', CONFIG.COUNTER_PULSE_SCALE, 1, 2, 0.05);
+        pulseScale.title = 'Scale multiplier for counter pulse effect. 1.3 = grow to 130% then return to normal.';
+
+        advSection.appendChild(removalTime);
+        advSection.appendChild(removalScale);
+        advSection.appendChild(notifDur);
+        advSection.appendChild(notifFade);
+        advSection.appendChild(pulseDur);
+        advSection.appendChild(pulseScale);
+
         body.appendChild(advSection);
 
         // Footer
@@ -1187,47 +1702,84 @@
         resetBtn.className = 'btn-reset';
         resetBtn.textContent = 'Reset to Defaults';
         resetBtn.addEventListener('click', () => {
-            if (confirm('Reset all settings to defaults?')) {
+            confirmAction('Reset all settings to defaults?', () => {
                 CONFIG = { ...DEFAULT_CONFIG };
                 saveConfig(CONFIG);
                 showNotification('✓ Settings reset to defaults');
                 setTimeout(() => location.reload(), 500);
-            }
+            });
         });
         const saveBtn = document.createElement('button');
         saveBtn.className = 'btn-save';
         saveBtn.textContent = 'Save Settings';
         saveBtn.addEventListener('click', () => {
-            CONFIG.MIN_VIEWS = parseInt(document.querySelector('#setting-min-views').value) || 0;
-            CONFIG.MIN_DURATION_SECONDS = parseInt(document.querySelector('#setting-min-duration').value) || 0;
-            CONFIG.FILTER_MODE = document.querySelector('#setting-filter-mode').value;
-            CONFIG.ENABLE_WHITELIST = document.querySelector('#setting-enable-whitelist').checked;
-            CONFIG.ENABLE_BLACKLIST = document.querySelector('#setting-enable-blacklist').checked;
-            CONFIG.THEME = document.querySelector('#setting-theme').value;
-            CONFIG.FONT_FAMILY = document.querySelector('#setting-font-family').value;
-            CONFIG.FONT_SIZE = parseInt(document.querySelector('#setting-font-size').value) || 14;
-            CONFIG.FONT_WEIGHT = document.querySelector('#setting-font-weight').value;
-            CONFIG.COUNTER_OPACITY = parseInt(document.querySelector('#setting-opacity').value) || 95;
-            CONFIG.USE_CTRL = document.querySelector('#shortcut-ctrl').checked;
-            CONFIG.USE_ALT = document.querySelector('#shortcut-alt').checked;
-            CONFIG.USE_SHIFT = document.querySelector('#shortcut-shift').checked;
-            CONFIG.KEYBOARD_SHORTCUT = document.querySelector('#shortcut-key').value;
-            CONFIG.ENABLE_STATISTICS = document.querySelector('#setting-enable-stats').checked;
-            CONFIG.SHOW_NOTIFICATIONS = document.querySelector('#setting-show-notifications').checked;
-            CONFIG.SMOOTH_REMOVAL = document.querySelector('#setting-smooth-removal').checked;
-            CONFIG.COUNTER_DRAGGABLE = document.querySelector('#setting-draggable').checked;
-            CONFIG.DEBUG = document.querySelector('#setting-debug').checked;
+            try {
+                // Validate and parse inputs
+                const minViews = Math.max(0, parseInt(document.querySelector('#setting-min-views')?.value) || 0);
+                const minDuration = Math.max(0, parseInt(document.querySelector('#setting-min-duration')?.value) || 0);
+                const fontSize = Math.max(10, Math.min(20, parseInt(document.querySelector('#setting-font-size')?.value) || 14));
+                const opacity = Math.max(50, Math.min(100, parseInt(document.querySelector('#setting-opacity')?.value) || 95));
+                const removalDur = Math.max(50, Math.min(5000, parseInt(document.querySelector('#setting-removal-duration')?.value) || 300));
+                const removalScale = Math.max(0.5, Math.min(1, parseFloat(document.querySelector('#setting-removal-scale')?.value) || 0.95));
+                const notifDur = Math.max(500, Math.min(10000, parseInt(document.querySelector('#setting-notification-duration')?.value) || 3000));
+                const notifFade = Math.max(50, Math.min(2000, parseInt(document.querySelector('#setting-notification-fade')?.value) || 300));
+                const pulseDur = Math.max(50, Math.min(2000, parseInt(document.querySelector('#setting-pulse-duration')?.value) || 200));
+                const pulseScale = Math.max(1, Math.min(2, parseFloat(document.querySelector('#setting-pulse-scale')?.value) || 1.3));
 
-            saveConfig(CONFIG);
-            showNotification('✓ Settings saved');
-            
-            if (state.counterElement) {
-                state.counterElement.remove();
-                state.counterElement = null;
+                CONFIG.MIN_VIEWS = minViews;
+                CONFIG.MIN_DURATION_SECONDS = minDuration;
+                CONFIG.FILTER_MODE = document.querySelector('#setting-filter-mode')?.value || 'OR';
+                CONFIG.ENABLE_WHITELIST = document.querySelector('#setting-enable-whitelist')?.checked || false;
+                CONFIG.ENABLE_BLACKLIST = document.querySelector('#setting-enable-blacklist')?.checked || false;
+                CONFIG.THEME = document.querySelector('#setting-theme')?.value || 'dark';
+                CONFIG.FONT_FAMILY = document.querySelector('#setting-font-family')?.value || 'Segoe UI';
+                CONFIG.FONT_SIZE = fontSize;
+                CONFIG.FONT_WEIGHT = document.querySelector('#setting-font-weight')?.value || 'normal';
+                CONFIG.COUNTER_OPACITY = opacity;
+                CONFIG.USE_CTRL = document.querySelector('#shortcut-ctrl')?.checked || false;
+                CONFIG.USE_ALT = document.querySelector('#shortcut-alt')?.checked || false;
+                CONFIG.USE_SHIFT = document.querySelector('#shortcut-shift')?.checked || false;
+                CONFIG.KEYBOARD_SHORTCUT = document.querySelector('#shortcut-key')?.value || 'KeyF';
+                CONFIG.ENABLE_STATISTICS = document.querySelector('#setting-enable-stats')?.checked || false;
+                CONFIG.SHOW_NOTIFICATIONS = document.querySelector('#setting-show-notifications')?.checked || false;
+                CONFIG.SMOOTH_REMOVAL = document.querySelector('#setting-smooth-removal')?.checked || false;
+                CONFIG.COUNTER_DRAGGABLE = document.querySelector('#setting-draggable')?.checked || false;
+                CONFIG.DEBUG = document.querySelector('#setting-debug')?.checked || false;
+                CONFIG.SKIP_LIVE_STREAMS = document.querySelector('#setting-skip-live')?.checked || false;
+                CONFIG.CASE_INSENSITIVE_LISTS = document.querySelector('#setting-case-insensitive')?.checked || false;
+                CONFIG.FILTER_ALL_LIVE_STREAMS = document.querySelector('#setting-filter-all-live')?.checked || false;
+                CONFIG.FILTER_ALL_SHORTS = document.querySelector('#setting-filter-all-shorts')?.checked || false;
+                CONFIG.REMOVAL_DURATION_MS = removalDur;
+                CONFIG.REMOVAL_SCALE = removalScale;
+                CONFIG.NOTIFICATION_DURATION_MS = notifDur;
+                CONFIG.NOTIFICATION_FADE_MS = notifFade;
+                CONFIG.COUNTER_PULSE_DURATION_MS = pulseDur;
+                CONFIG.COUNTER_PULSE_SCALE = pulseScale;
+
+                saveConfig(CONFIG);
+                
+                // Show conflict warning if exists
+                const conflictCheck = detectShortcutConflicts();
+                if (conflictCheck.hasConflicts) {
+                    const conflict = conflictCheck.conflicts[0];
+                    showNotification(`⚠️ ${conflict.message}`, 4000);
+                } else {
+                    showNotification('✓ Settings saved');
+                }
+                
+                if (state.counterElement) {
+                    state.counterElement.remove();
+                    state.counterElement = null;
+                }
+                injectStyles();
+                createCounter();
+                state.processedVideos = new WeakSet();
+                filterVideos();
+                toggleSettingsPanel();
+            } catch (e) {
+                log('❌ Error saving settings:', e);
+                showNotification('⚠️ Error saving settings');
             }
-            injectStyles();
-            createCounter();
-            toggleSettingsPanel();
         });
         footer.appendChild(resetBtn);
         footer.appendChild(saveBtn);
@@ -1269,9 +1821,9 @@
         document.addEventListener('keydown', (e) => {
             // Check if key matches configured shortcut
             const keyMatch = e.code === CONFIG.KEYBOARD_SHORTCUT;
-            const ctrlMatch = CONFIG.USE_CTRL ? e.ctrlKey : !e.ctrlKey;
-            const altMatch = CONFIG.USE_ALT ? e.altKey : !e.altKey;
-            const shiftMatch = CONFIG.USE_SHIFT ? e.shiftKey : !e.shiftKey;
+            const ctrlMatch = !CONFIG.USE_CTRL || e.ctrlKey;
+            const altMatch = !CONFIG.USE_ALT || e.altKey;
+            const shiftMatch = !CONFIG.USE_SHIFT || e.shiftKey;
 
             if (keyMatch && ctrlMatch && altMatch && shiftMatch) {
                 e.preventDefault();
@@ -1318,6 +1870,10 @@
 
     const injectStyles = () => {
         const theme = getThemeColors();
+        const existingStyle = document.getElementById('yt-filter-styles');
+        if (existingStyle) {
+            existingStyle.remove();
+        }
         const style = document.createElement('style');
         style.id = 'yt-filter-styles';
         style.textContent = `
@@ -1751,6 +2307,53 @@
                 transform: translateY(0);
             }
 
+            .yt-filter-confirm {
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: ${theme.headerBg};
+                color: #fff;
+                padding: 12px 16px;
+                border-radius: 10px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+                z-index: 99999999;
+                opacity: 0;
+                transform: translateY(10px);
+                transition: opacity 0.2s ease, transform 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .yt-filter-confirm.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            .yt-filter-confirm-actions {
+                display: flex;
+                gap: 6px;
+            }
+
+            .yt-filter-confirm .btn-yes,
+            .yt-filter-confirm .btn-no {
+                border: none;
+                border-radius: 6px;
+                padding: 6px 10px;
+                cursor: pointer;
+                font-weight: 600;
+            }
+
+            .yt-filter-confirm .btn-yes {
+                background: #00c853;
+                color: #000;
+            }
+
+            .yt-filter-confirm .btn-no {
+                background: #444;
+                color: #fff;
+            }
+
             /* Smooth removal animations */
             ytd-rich-item-renderer,
             ytd-video-renderer,
@@ -1770,22 +2373,21 @@
             state.observer.disconnect();
         }
 
-        // Debounced filter function
-        const debouncedFilter = debounce(filterVideos, CONFIG.DEBOUNCE_DELAY);
+        let pendingNodes = [];
+        const debouncedProcess = debounce(() => {
+            const toProcess = pendingNodes;
+            pendingNodes = [];
+            processCandidates(toProcess);
+        }, CONFIG.DEBOUNCE_DELAY);
 
         // Create new observer
         state.observer = new MutationObserver((mutations) => {
-            let shouldFilter = false;
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => pendingNodes.push(node));
+            });
 
-            for (const mutation of mutations) {
-                if (mutation.addedNodes.length > 0) {
-                    shouldFilter = true;
-                    break;
-                }
-            }
-
-            if (shouldFilter) {
-                debouncedFilter();
+            if (pendingNodes.length > 0) {
+                debouncedProcess();
             }
         });
 
@@ -1814,7 +2416,7 @@
             return;
         }
 
-        log('Initializing YouTube Filter Pro 3.3.1...');
+        log('Initializing YouTube Filter Pro 3.4.1...');
 
         // Inject styles immediately
         injectStyles();
@@ -1849,20 +2451,20 @@
                 }
             });
             GM_registerMenuCommand('📈 Reset Statistics', () => {
-                if (confirm('Reset all lifetime statistics? This cannot be undone.')) {
+                confirmAction('Reset all lifetime statistics?', () => {
                     state.lifetimeStats = { totalFiltered: 0, firstInstall: Date.now(), lastReset: Date.now() };
                     saveStats();
                     showNotification('✓ Statistics reset successfully', 2000);
-                }
+                });
             });
             GM_registerMenuCommand('✅ Add Current Channel to Whitelist', () => {
                 const currentVideo = document.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
                 if (currentVideo) {
                     const channelInfo = extractChannelInfo(currentVideo);
-                    if (channelInfo) {
-                        if (!CONFIG.WHITELIST.includes(channelInfo.id)) {
+                    if (channelInfo && channelInfo.id) {
+                        if (!listContains(CONFIG.WHITELIST, channelInfo.id)) {
                             CONFIG.WHITELIST.push(channelInfo.id);
-                            saveConfig(CONFIG);
+                            updateConfig({ WHITELIST: CONFIG.WHITELIST });
                             showNotification(`✅ Added "${channelInfo.name}" to whitelist`, 2000);
                         } else {
                             showNotification(`Already whitelisted: ${channelInfo.name}`, 2000);
@@ -1878,10 +2480,10 @@
                 const currentVideo = document.querySelector('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer');
                 if (currentVideo) {
                     const channelInfo = extractChannelInfo(currentVideo);
-                    if (channelInfo) {
-                        if (!CONFIG.BLACKLIST.includes(channelInfo.id)) {
+                    if (channelInfo && channelInfo.id) {
+                        if (!listContains(CONFIG.BLACKLIST, channelInfo.id)) {
                             CONFIG.BLACKLIST.push(channelInfo.id);
-                            saveConfig(CONFIG);
+                            updateConfig({ BLACKLIST: CONFIG.BLACKLIST });
                             showNotification(`🚫 Added "${channelInfo.name}" to blacklist`, 2000);
                         } else {
                             showNotification(`Already blacklisted: ${channelInfo.name}`, 2000);
@@ -1916,23 +2518,23 @@
                 window.addEventListener('yt-navigate-finish', () => {
                     log('Navigation detected, resetting and filtering...');
                     state.processedVideos = new WeakSet();
-                    setTimeout(filterVideos, 500);
+                    setTimeout(filterVideos, CONSTANTS.NAVIGATION_FILTER_DELAY_MS);
                 });
 
                 // Listen to scroll events for lazy-loaded content
                 let scrollTimeout;
                 window.addEventListener('scroll', () => {
                     clearTimeout(scrollTimeout);
-                    scrollTimeout = setTimeout(filterVideos, 300);
+                    scrollTimeout = setTimeout(filterVideos, CONSTANTS.SCROLL_FILTER_DELAY_MS);
                 }, { passive: true });
 
                 log('✓ YouTube Filter Pro initialized successfully!');
                 
                 if (CONFIG.SHOW_NOTIFICATIONS) {
-                    showNotification('🔥 YT Filter Pro Active', 2000);
+                    showNotification('🔥 or1n YT filter Active', 2000);
                 }
             } else {
-                setTimeout(init, 100);
+                setTimeout(init, CONSTANTS.INIT_RETRY_DELAY_MS);
             }
         };
 

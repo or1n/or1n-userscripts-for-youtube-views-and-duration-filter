@@ -73,37 +73,6 @@
         ENABLE_WHITELIST: false, // Apply whitelist rules
         ENABLE_BLACKLIST: false, // Apply blacklist rules
         CASE_INSENSITIVE_LISTS: true, // Ignore case when matching whitelist/blacklist entries
-        
-        // Filter Logic
-        FILTER_MODE: 'OR', // 'AND': both criteria must fail to filter | 'OR': either criterion can trigger filter
-        SKIP_LIVE_STREAMS: true, // Do not filter videos currently streaming live
-        FILTER_ALL_LIVE_STREAMS: false, // Hide ALL live streams regardless of views/duration (overrides SKIP_LIVE_STREAMS)
-        FILTER_ALL_SHORTS: false, // Hide ALL YouTube Shorts regardless of views/duration
-        
-        // Advanced Features
-        ENABLE_DETAILED_STATS: true, // Track filter reasons, channels, dates
-        ENABLE_PERFORMANCE_METRICS: false // Track DOM query timing and batch processing stats
-    };
-
-    const VIDEO_SELECTORS = [
-        'ytd-rich-item-renderer',
-        'ytd-video-renderer',
-        'ytd-grid-video-renderer',
-        'ytd-compact-video-renderer',
-        'ytd-playlist-video-renderer',
-        'ytd-rich-grid-media',
-        'yt-lockup-view-model',
-        'ytd-lockup-view-model',
-        'ytd-reel-item-renderer',  // YouTube Shorts
-        'ytd-shorts-grid-renderer',
-        'ytd-reel-shelf-renderer',
-        'ytd-rich-section-renderer'
-    ];
-
-    // Constants for magic numbers
-    const CONSTANTS = {
-        CONFIRM_AUTO_DISMISS_MS: 6000,
-        INIT_RETRY_DELAY_MS: 100,
         NAVIGATION_FILTER_DELAY_MS: 500,
         SCROLL_FILTER_DELAY_MS: 300,
         COUNTER_FADE_DURATION_MS: 300,
@@ -2491,8 +2460,13 @@
      * Toggle settings panel visibility
      */
     const toggleSettingsPanel = () => {
+        try {
         if (!state.settingsPanel) {
             createSettingsPanel();
+                if (!state.settingsPanel) {
+                    log('❌ Failed to create settings panel');
+                    return;
+                }
         }
         
         const isVisible = state.settingsPanel.classList.contains('visible');
@@ -2500,6 +2474,10 @@
             state.settingsPanel.classList.remove('visible');
         } else {
             state.settingsPanel.classList.add('visible');
+        }
+        } catch (e) {
+            log('❌ Error toggling settings panel:', e);
+            showNotification('⚠️ Failed to open settings');
         }
     };
 

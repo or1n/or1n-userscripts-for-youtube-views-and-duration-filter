@@ -177,10 +177,10 @@
                     }
                 }
                 
-                // Check for duration (HH:MM:SS or MM:SS)
-                const durationMatch = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                // Check for duration (HH:MM:SS or MM:SS) - CRITICAL FIX: made regex more flexible
+                const durationMatch = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
                 if (durationMatch && !durationText) {
-                    durationText = text;
+                    durationText = durationMatch[0];
                     log(`✅ FOUND DURATION in span: "${durationText}"`);
                 }
             }
@@ -207,12 +207,12 @@
                     }
                 }
                 
-                // Look for duration
+                // Look for duration - CRITICAL FIX: removed ^ and $ anchors to match duration anywhere in line
                 if (!durationText) {
                     for (const line of lines) {
-                        const durMatch = line.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                        const durMatch = line.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
                         if (durMatch) {
-                            durationText = line;
+                            durationText = durMatch[0];
                             log(`✅ FOUND DURATION in line: "${durationText}"`);
                             break;
                         }

@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.3
+// @version      3.0.4
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
 // @homepage     https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
 // @supportURL   https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/issues
-// @updateURL    https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
-// @downloadURL  https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
+// @updateURL    https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/refs/heads/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
+// @downloadURL  https://raw.githubusercontent.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/refs/heads/main/or1n-userscripts-for-youtube-views-and-duration-filter.js
 // @match        *://*.youtube.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=youtube.com
 // @grant        GM_getValue

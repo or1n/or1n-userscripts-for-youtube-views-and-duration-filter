@@ -22,7 +22,7 @@
 
     // ==================== DEFAULT CONFIGURATION ====================
     const DEFAULT_CONFIG = {
-        MIN_VIEWS: 10000,
+        MIN_VIEWS: 99999,
         MIN_DURATION_SECONDS: 240,
         DEBOUNCE_DELAY: 100,
         DEBUG: true,  // ENABLED FOR TESTING - shows console logs

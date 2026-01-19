@@ -189,6 +189,7 @@ Add channels whose videos you NEVER want to see.
 - **Opacity:** 50-100% transparency
 - **Draggable:** Move counter by clicking header
 - **Position:** Automatically saved between sessions
+ - **Open on Load:** Control whether the counter opens automatically when YouTube/new tabs load (Settings → Appearance)
 
 ### ⌨️ Keyboard Shortcuts
 

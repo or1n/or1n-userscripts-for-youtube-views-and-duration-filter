@@ -146,6 +146,7 @@ Add channels whose videos you NEVER want to see:
 - **Draggable**: Click and drag header to reposition
 - **Position Persistence**: Automatically saved between sessions
 - **Pulse Animations**: Configurable duration and scale
+ - **Open on Load**: Choose whether the counter opens automatically on new tabs (setting: OPEN_COUNTER_ON_LOAD)
 
 #### Animations
 

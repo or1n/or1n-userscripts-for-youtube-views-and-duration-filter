@@ -912,10 +912,7 @@
         // Toggle counter visibility (entire UI)
         toggleBtn._handler = (e) => {
             e.stopPropagation();
-            const isHidden = counter.style.display === 'none';
-            counter.style.display = isHidden ? 'block' : 'none';
-            toggleBtn.textContent = isHidden ? '−' : '+';
-            toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
+            toggleCounter();
             quickMenu.style.display = 'none';
         };
         toggleBtn.addEventListener('click', toggleBtn._handler);
@@ -1045,6 +1042,25 @@
         const lifetimeElement = state.counterElement.querySelector('#yt-lifetime-count');
         if (lifetimeElement) {
             lifetimeElement.textContent = state.lifetimeStats.totalFiltered.toLocaleString();
+        }
+    };
+
+    /**
+     * Toggle the counter visibility; create if missing
+     */
+    const toggleCounter = () => {
+        if (!state.counterElement) {
+            const el = createCounter();
+            el.style.display = 'block';
+            return;
+        }
+        const el = state.counterElement;
+        const isHidden = el.style.display === 'none';
+        el.style.display = isHidden ? 'block' : 'none';
+        const toggleBtn = el.querySelector('.yt-filter-toggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = isHidden ? '−' : '+';
+            toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
         }
     };
 
@@ -1186,6 +1202,32 @@
                 processNotificationQueue();
             }, CONFIG.NOTIFICATION_FADE_MS);
         }, duration);
+    };
+
+    /**
+     * Register keyboard shortcut to toggle counter
+     */
+    const setupKeyboardShortcuts = () => {
+        window.addEventListener('keydown', (e) => {
+            try {
+                const keyCode = e.code || '';
+                const expected = CONFIG.KEYBOARD_SHORTCUT;
+                const ctrl = !!e.ctrlKey;
+                const alt = !!e.altKey;
+                const shift = !!e.shiftKey;
+                if (
+                    keyCode === expected &&
+                    ctrl === !!CONFIG.USE_CTRL &&
+                    alt === !!CONFIG.USE_ALT &&
+                    shift === !!CONFIG.USE_SHIFT
+                ) {
+                    e.preventDefault();
+                    toggleCounter();
+                }
+            } catch (err) {
+                log('⚠️ Keyboard shortcut error:', err);
+            }
+        });
     };
 
     // ==================== SETTINGS PANEL ====================
@@ -1818,30 +1860,6 @@
         } else {
             state.settingsPanel.classList.add('visible');
         }
-    };
-
-    // ==================== KEYBOARD SHORTCUTS ====================
-
-    const setupKeyboardShortcuts = () => {
-        document.addEventListener('keydown', (e) => {
-            // Check if key matches configured shortcut
-            const keyMatch = e.code === CONFIG.KEYBOARD_SHORTCUT;
-            const ctrlMatch = !CONFIG.USE_CTRL || e.ctrlKey;
-            const altMatch = !CONFIG.USE_ALT || e.altKey;
-            const shiftMatch = !CONFIG.USE_SHIFT || e.shiftKey;
-
-            if (keyMatch && ctrlMatch && altMatch && shiftMatch) {
-                e.preventDefault();
-                if (state.counterElement) {
-                    const isVisible = state.counterElement.style.display !== 'none';
-                    state.counterElement.style.display = isVisible ? 'none' : 'block';
-                    if (CONFIG.SHOW_NOTIFICATIONS) {
-                        const sessionCount = state.sessionFiltered.toLocaleString();
-                        showNotification(isVisible ? `👁️ Counter Hidden (${sessionCount} filtered)` : `👁️ Counter Visible (${sessionCount} filtered)`, 2000);
-                    }
-                }
-            }
-        });
     };
 
     // ==================== STYLES ====================
@@ -2533,7 +2551,7 @@
                     scrollTimeout = setTimeout(filterVideos, CONSTANTS.SCROLL_FILTER_DELAY_MS);
                 }, { passive: true });
 
-                log('✓ YouTube Filter Pro initialized successfully!');
+                log('✓ or1n YouTube Filter initialized successfully!');
                 
                 if (CONFIG.SHOW_NOTIFICATIONS) {
                     showNotification('🔥 or1n YT filter Active', 2000);

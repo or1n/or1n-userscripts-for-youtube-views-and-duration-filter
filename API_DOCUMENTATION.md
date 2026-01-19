@@ -335,6 +335,11 @@ Creates floating statistics counter.
 - Stats display (session/lifetime)
 - Filter info
 - Quick menu
+ 
+ **Behavior:**
+ 
+ - Open on load controlled by `OPEN_COUNTER_ON_LOAD` (default: true)
+ - Header toggle shows/hides the entire counter
 
 #### `updateCounter()`
 

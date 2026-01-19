@@ -149,17 +149,18 @@
             const allText = element.innerText || element.textContent || '';
             const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
 
-            log('=== Extracting video data ===');
+            log('🎬 === EXTRACTING VIDEO DATA ===');
+            log('Element tag:', element.tagName);
             log('Total lines found:', lines.length);
-            log('All text:', allText.substring(0, 200));
+            log('All text (first 300 chars):', allText.substring(0, 300));
             
             // Scan for views - more flexible regex
             for (const line of lines) {
-                log('Checking line:', JSON.stringify(line));
+                log('  >> Checking line:', JSON.stringify(line));
                 // Match: number + optional K/M/B + optional space + "view" or "views"
                 if (line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:view|views|visualizações|просмотров)/i)) {
                     viewsText = line;
-                    log(`✓ Found views: "${line}"`);
+                    log(`  ✅ MATCHED VIEWS: "${line}"`);
                     break;
                 }
             }
@@ -168,15 +169,15 @@
             for (const line of lines) {
                 if (line.match(/^\d+:\d+(?::\d+)?$/)) {
                     durationText = line;
-                    log(`✓ Found duration: "${line}"`);
+                    log(`  ✅ MATCHED DURATION: "${line}"`);
                     break;
                 }
             }
 
-            log('Result - Views:', viewsText, 'Duration:', durationText);
+            log('📌 Final result - Views:', viewsText, '| Duration:', durationText);
             return { viewsText, durationText };
         } catch (e) {
-            log('Error extracting video data:', e.message);
+            log('❌ ERROR in extractVideoData:', e.message, e.stack);
             return { viewsText: null, durationText: null };
         }
     };
@@ -190,10 +191,13 @@
             return false;
         }
 
+        log('🔍 shouldFilterVideo called for element:', element.tagName);
         const { viewsText, durationText } = extractVideoData(element);
+        log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
 
         // Skip if missing critical data
         if (!viewsText && !durationText) {
+            log('⏭️ Skipping: no views or duration found');
             return false;
         }
 

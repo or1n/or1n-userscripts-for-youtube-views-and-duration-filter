@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.0.0
+// @version      3.0.1
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -311,48 +311,97 @@
         
         const daysSinceInstall = Math.floor((Date.now() - state.lifetimeStats.firstInstall) / (1000 * 60 * 60 * 24));
         
-        counter.innerHTML = `
-            <div class="yt-filter-header">
-                <span class="yt-filter-title">🔥 YT Filter Pro</span>
-                <div class="yt-filter-buttons">
-                    <button class="yt-filter-settings" title="Settings">⚙️</button>
-                    <button class="yt-filter-toggle" title="Hide Counter">−</button>
-                </div>
-            </div>
-            <div class="yt-filter-stats">
-                <div class="stat">
-                    <span class="stat-label">Session:</span>
-                    <span class="stat-value" id="yt-session-count">0</span>
-                </div>
-                ${CONFIG.ENABLE_STATISTICS ? `
-                <div class="stat lifetime">
-                    <span class="stat-label">Lifetime:</span>
-                    <span class="stat-value" id="yt-lifetime-count">${state.lifetimeStats.totalFiltered.toLocaleString()}</span>
-                </div>
-                <div class="stat-info">
-                    📊 Active for ${daysSinceInstall} day${daysSinceInstall !== 1 ? 's' : ''}
-                </div>
-                ` : ''}
-                <div class="stat-info">
-                    Min Views: ${CONFIG.MIN_VIEWS.toLocaleString()}<br>
-                    Min Duration: ${Math.floor(CONFIG.MIN_DURATION_SECONDS / 60)}m ${CONFIG.MIN_DURATION_SECONDS % 60}s
-                </div>
-            </div>
-        `;
+        // Build counter DOM manually (Trusted Types compatible)
+        const header = document.createElement('div');
+        header.className = 'yt-filter-header';
+        
+        const title = document.createElement('span');
+        title.className = 'yt-filter-title';
+        title.textContent = '🔥 YT Filter Pro';
+        
+        const buttons = document.createElement('div');
+        buttons.className = 'yt-filter-buttons';
+        
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'yt-filter-settings';
+        settingsBtn.title = 'Settings';
+        settingsBtn.textContent = '⚙️';
+        
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'yt-filter-toggle';
+        toggleBtn.title = 'Hide Counter';
+        toggleBtn.textContent = '−';
+        
+        buttons.appendChild(settingsBtn);
+        buttons.appendChild(toggleBtn);
+        header.appendChild(title);
+        header.appendChild(buttons);
+        
+        const stats = document.createElement('div');
+        stats.className = 'yt-filter-stats';
+        
+        // Session stat
+        const sessionStat = document.createElement('div');
+        sessionStat.className = 'stat';
+        const sessionLabel = document.createElement('span');
+        sessionLabel.className = 'stat-label';
+        sessionLabel.textContent = 'Session:';
+        const sessionValue = document.createElement('span');
+        sessionValue.className = 'stat-value';
+        sessionValue.id = 'yt-session-count';
+        sessionValue.textContent = '0';
+        sessionStat.appendChild(sessionLabel);
+        sessionStat.appendChild(sessionValue);
+        stats.appendChild(sessionStat);
+        
+        // Lifetime stats (conditional)
+        if (CONFIG.ENABLE_STATISTICS) {
+            const lifetimeStat = document.createElement('div');
+            lifetimeStat.className = 'stat lifetime';
+            const lifetimeLabel = document.createElement('span');
+            lifetimeLabel.className = 'stat-label';
+            lifetimeLabel.textContent = 'Lifetime:';
+            const lifetimeValue = document.createElement('span');
+            lifetimeValue.className = 'stat-value';
+            lifetimeValue.id = 'yt-lifetime-count';
+            lifetimeValue.textContent = state.lifetimeStats.totalFiltered.toLocaleString();
+            lifetimeStat.appendChild(lifetimeLabel);
+            lifetimeStat.appendChild(lifetimeValue);
+            stats.appendChild(lifetimeStat);
+            
+            const daysInfo = document.createElement('div');
+            daysInfo.className = 'stat-info';
+            daysInfo.textContent = `📊 Active for ${daysSinceInstall} day${daysSinceInstall !== 1 ? 's' : ''}`;
+            stats.appendChild(daysInfo);
+        }
+        
+        // Filter info
+        const filterInfo = document.createElement('div');
+        filterInfo.className = 'stat-info';
+        const minViewsText = document.createTextNode(`Min Views: ${CONFIG.MIN_VIEWS.toLocaleString()}`);
+        const br = document.createElement('br');
+        const minDurationText = document.createTextNode(
+            `Min Duration: ${Math.floor(CONFIG.MIN_DURATION_SECONDS / 60)}m ${CONFIG.MIN_DURATION_SECONDS % 60}s`
+        );
+        filterInfo.appendChild(minViewsText);
+        filterInfo.appendChild(br);
+        filterInfo.appendChild(minDurationText);
+        stats.appendChild(filterInfo);
+        
+        counter.appendChild(header);
+        counter.appendChild(stats);
 
         // Apply theme and font settings
         applyCounterStyle(counter);
 
-        // Settings button
-        const settingsBtn = counter.querySelector('.yt-filter-settings');
+        // Settings button (already created above)
         settingsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleSettingsPanel();
         });
 
-        // Toggle visibility
-        const toggleBtn = counter.querySelector('.yt-filter-toggle');
-        const statsDiv = counter.querySelector('.yt-filter-stats');
+        // Toggle visibility (already created above)
+        const statsDiv = stats;
         toggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const isHidden = statsDiv.style.display === 'none';
@@ -471,7 +520,10 @@
     const createSettingsPanel = () => {
         const panel = document.createElement('div');
         panel.id = 'yt-filter-settings-panel';
-        panel.innerHTML = `
+        
+        // Use template element to avoid Trusted Types violation
+        const template = document.createElement('template');
+        template.innerHTML = `
             <div class="settings-overlay" id="settings-overlay"></div>
             <div class="settings-content">
                 <div class="settings-header">
@@ -589,6 +641,9 @@
                 </div>
             </div>
         `;
+        
+        // Append template content to panel (Trusted Types compatible)
+        panel.appendChild(template.content.cloneNode(true));
 
         document.body.appendChild(panel);
         state.settingsPanel = panel;

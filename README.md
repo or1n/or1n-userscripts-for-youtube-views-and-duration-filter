@@ -28,7 +28,7 @@ With the filter enabled, those videos are filtered out, and the next available v
 ## Installation
 
 1. Install a UserScript manager extension for your browser (e.g., Violentmonkey, Tampermonkey, Greasemonkey).
-2. Click on the following link to install the UserScript: [YouTube View and Duration Filter](https://github.com/or1n/YouTube-View-and-Duration-Filter/raw/main/YouTube%20View%20and%20Duration%20Filter.js).
+2. Click on the following link to install the UserScript: [YouTube View and Duration Filter](https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/raw/main/or1n-userscripts-for-youtube-views-and-duration-filter.js).
 3. Set your desired minimum view count and duration in the script (default is 10,000 views and 240 seconds).
 
 ## Configuration
@@ -69,8 +69,8 @@ Contributions are welcome! If you have any suggestions, bug reports, or feature 
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](https://github.com/or1n/YouTube-View-and-Duration-Filter/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/blob/main/LICENSE) file for details.
 
 ## Contact Information
 
-For support or questions, please contact [or1n](https://github.com/or1n) or open an issue on the [GitHub repository](https://github.com/or1n/YouTube-View-and-Duration-Filter/issues).
+For support or questions, please contact [or1n](https://github.com/or1n) or open an issue on the [GitHub repository](https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter/issues).

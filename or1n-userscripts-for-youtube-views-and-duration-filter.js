@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.1.0
+// @version      3.2.0
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -151,64 +151,86 @@
 
     /**
      * Extract video metadata from various YouTube elements
-     * FIXED FOR YOUTUBE 2025: Handles concatenated text, extracts only relevant portions
+     * FIXED FOR YOUTUBE 2025: Enhanced selectors and comprehensive text extraction
      */
     const extractVideoData = (element) => {
         try {
             let viewsText = null;
             let durationText = null;
 
-            // Get all text content from the element
-            const allText = element.innerText || element.textContent || '';
-            const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
-
             log('🎬 === EXTRACTING VIDEO DATA ===');
             log('Element tag:', element.tagName);
-            log('Total lines found:', lines.length);
-            log('All text (first 300 chars):', allText.substring(0, 300));
             
-            // Scan for views - extract ONLY the view count portion, not entire line
-            for (const line of lines) {
-                log('  >> Checking line:', JSON.stringify(line));
-                // Try to find view count in this line
-                // This regex extracts: number + multiplier + "views" keyword
-                const viewMatch = line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:view|views|visualizações|просмотров)/i);
-                if (viewMatch) {
-                    viewsText = viewMatch[0]; // Extract ONLY the matched portion
-                    log(`  ✅ MATCHED VIEWS: "${viewsText}"`);
-                    break;
+            // Strategy 1: Try to find spans with view counts (most reliable)
+            const metadataSpans = element.querySelectorAll('[role="text"], .metadata-row span, ytd-formatted-string');
+            for (const span of metadataSpans) {
+                const text = (span.innerText || span.textContent || '').trim();
+                if (!text) continue;
+                
+                // Check for views/views pattern
+                const viewMatch = text.match(/(\d+(?:[.,]\d+)?)\s*([KMBkmb]?)\s*(?:views?|visualizações|просмотров|次)/i);
+                if (viewMatch && !viewsText) {
+                    const fullMatch = text.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:views?|visualizações|просмотров|次)/i);
+                    if (fullMatch) {
+                        viewsText = fullMatch[0];
+                        log(`✅ FOUND VIEWS in span: "${viewsText}"`);
+                    }
+                }
+                
+                // Check for duration (HH:MM:SS or MM:SS)
+                const durationMatch = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                if (durationMatch && !durationText) {
+                    durationText = text;
+                    log(`✅ FOUND DURATION in span: "${durationText}"`);
                 }
             }
 
-            // Scan for duration (12:34 or 1:23:45 format)
-            // First try to find duration on its own line
-            for (const line of lines) {
-                if (line.match(/^\d+:\d+(?::\d+)?$/)) {
-                    durationText = line;
-                    log(`  ✅ MATCHED DURATION (clean): "${line}"`);
-                    break;
+            // Strategy 2: Check all text content if spans didn't find views
+            if (!viewsText || !durationText) {
+                const allText = element.innerText || element.textContent || '';
+                const lines = allText.split('\n').map(l => l.trim()).filter(l => l);
+                
+                log('Scanning lines, found:', lines.length);
+                
+                // Look for views
+                if (!viewsText) {
+                    for (const line of lines) {
+                        const viewMatch = line.match(/(\d+(?:[.,]\d+)?)\s*([KMBkmb]?)\s*(?:views?|visualizações|просмотров|次)/i);
+                        if (viewMatch) {
+                            const fullMatch = line.match(/\d+(?:[.,]\d+)?\s*[KMBkmb]?\s*(?:views?|visualizações|просмотров|次)/i);
+                            if (fullMatch) {
+                                viewsText = fullMatch[0];
+                                log(`✅ FOUND VIEWS in line: "${viewsText}"`);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Look for duration
+                if (!durationText) {
+                    for (const line of lines) {
+                        const durMatch = line.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                        if (durMatch) {
+                            durationText = line;
+                            log(`✅ FOUND DURATION in line: "${durationText}"`);
+                            break;
+                        }
+                    }
                 }
             }
-            
-            // If no clean duration found, search within concatenated text
-            if (!durationText) {
-                const durationMatch = allText.match(/\b(\d+:\d+(?::\d+)?)\b/);
-                if (durationMatch) {
-                    durationText = durationMatch[1];
-                    log(`  ✅ MATCHED DURATION (extracted): "${durationText}"`);
-                }
-            }
-            
-            // Handle LIVE streams - explicitly check for "watching" instead of views
-            const watchingMatch = allText.match(/\d+\s*(?:watching|viewers)/i);
+
+            // Strategy 3: Handle LIVE streams
+            const allText = element.innerText || element.textContent || '';
+            const watchingMatch = allText.match(/\d+\s*(?:watching|viewers|ライブ視聴中)/i);
             if (watchingMatch && !viewsText) {
-                log(`  ℹ️ LIVE STREAM DETECTED (${watchingMatch[0]}) - Will be skipped`);
+                log(`ℹ️ LIVE STREAM DETECTED - skipping`);
             }
 
-            log('📌 Final result - Views:', viewsText, '| Duration:', durationText);
+            log('📌 Final: Views:', viewsText, '| Duration:', durationText);
             return { viewsText, durationText };
         } catch (e) {
-            log('❌ ERROR in extractVideoData:', e.message, e.stack);
+            log('❌ ERROR in extractVideoData:', e.message);
             return { viewsText: null, durationText: null };
         }
     };
@@ -410,8 +432,14 @@
         toggleBtn.title = 'Hide Counter';
         toggleBtn.textContent = '−';
         
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'yt-filter-close';
+        closeBtn.title = 'Close Counter';
+        closeBtn.textContent = '✕';
+        
         buttons.appendChild(settingsBtn);
         buttons.appendChild(toggleBtn);
+        buttons.appendChild(closeBtn);
         header.appendChild(title);
         header.appendChild(buttons);
         
@@ -486,6 +514,19 @@
             statsDiv.style.display = isHidden ? 'block' : 'none';
             toggleBtn.textContent = isHidden ? '−' : '+';
             toggleBtn.title = isHidden ? 'Hide Counter' : 'Show Counter';
+        });
+
+        // Close button - completely hides and closes the counter
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (counter) {
+                counter.style.transition = 'opacity 0.3s ease';
+                counter.style.opacity = '0';
+                setTimeout(() => {
+                    counter.remove();
+                    state.counterElement = null;
+                }, 300);
+            }
         });
 
         // Make draggable
@@ -992,26 +1033,26 @@
         if (CONFIG.THEME === 'light') {
             return {
                 bg: 'linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%)',
-                border: '#cc0000',
-                headerBg: 'linear-gradient(135deg, #cc0000 0%, #aa0000 100%)',
+                border: '#cccccc',
+                headerBg: 'linear-gradient(135deg, #333333 0%, #555555 100%)',
                 text: '#333',
                 textMuted: '#666',
-                statBg: 'rgba(204, 0, 0, 0.1)',
+                statBg: 'rgba(200, 200, 200, 0.15)',
                 infoBg: 'rgba(0, 0, 0, 0.05)',
                 shadow: 'rgba(0, 0, 0, 0.2)',
-                shadowHover: 'rgba(204, 0, 0, 0.3)'
+                shadowHover: 'rgba(0, 0, 0, 0.3)'
             };
         }
         return {
             bg: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-            border: '#ff0000',
-            headerBg: 'linear-gradient(135deg, #ff0000 0%, #cc0000 100%)',
-            text: '#fff',
-            textMuted: '#aaa',
-            statBg: 'rgba(255, 0, 0, 0.1)',
+            border: '#555555',
+            headerBg: 'linear-gradient(135deg, #333333 0%, #555555 100%)',
+            text: '#ffffff',
+            textMuted: '#999999',
+            statBg: 'rgba(100, 100, 100, 0.15)',
             infoBg: 'rgba(255, 255, 255, 0.05)',
             shadow: 'rgba(0, 0, 0, 0.6)',
-            shadowHover: 'rgba(255, 0, 0, 0.4)'
+            shadowHover: 'rgba(100, 100, 100, 0.3)'
         };
     };
 
@@ -1022,8 +1063,8 @@
         style.textContent = `
             #yt-filter-counter {
                 position: fixed;
-                top: 80px;
-                right: 20px;
+                top: 100px;
+                left: 20px;
                 background: ${theme.bg};
                 border: 2px solid ${theme.border};
                 border-radius: 12px;
@@ -1063,7 +1104,8 @@
             }
 
             .yt-filter-settings,
-            .yt-filter-toggle {
+            .yt-filter-toggle,
+            .yt-filter-close {
                 background: rgba(255, 255, 255, 0.2);
                 border: none;
                 color: #fff;
@@ -1081,7 +1123,8 @@
             }
 
             .yt-filter-settings:hover,
-            .yt-filter-toggle:hover {
+            .yt-filter-toggle:hover,
+            .yt-filter-close:hover {
                 background: rgba(255, 255, 255, 0.3);
             }
 
@@ -1101,8 +1144,8 @@
             }
 
             .stat.lifetime {
-                border-left-color: #00ff00;
-                background: rgba(0, 255, 0, 0.1);
+                border-left-color: ${theme.border};
+                background: ${theme.statBg};
             }
 
             .stat-label {
@@ -1281,7 +1324,7 @@
             }
 
             .btn-reset-stats {
-                background: #ff0000;
+                background: #666666;
                 color: #fff;
                 border: none;
                 padding: 8px 16px;
@@ -1292,7 +1335,7 @@
             }
 
             .btn-reset-stats:hover {
-                background: #cc0000;
+                background: #555555;
             }
 
             .settings-footer {
@@ -1422,7 +1465,7 @@
             return;
         }
 
-        log('Initializing YouTube Filter Pro 2026...');
+        log('Initializing YouTube Filter Pro 3.2.0...');
 
         // Inject styles immediately
         injectStyles();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         or1n-userscripts-for-youtube-views-and-duration-filter
 // @namespace    https://github.com/or1n/or1n-userscripts-for-youtube-views-and-duration-filter
-// @version      3.3.0
+// @version      3.3.1
 // @description  Advanced YouTube video filter with customizable settings, themes, and live statistics
 // @author       or1n
 // @license      MIT
@@ -263,41 +263,6 @@
         }
     };
 
-    /**
-     * Check if video should be filtered
-     */
-    const shouldFilterVideo = (element) => {
-        log('🔍 shouldFilterVideo called for element:', element.tagName);
-        const { viewsText, durationText } = extractVideoData(element);
-        log('📊 extractVideoData returned - views:', viewsText, 'duration:', durationText);
-
-        // Skip if missing critical data
-        if (!viewsText && !durationText) {
-            log('⏭️ Skipping: no views or duration found');
-            return false;
-        }
-
-        const viewCount = parseViewCount(viewsText || '');
-        const durationSeconds = timeToSeconds(durationText || '');
-
-        log('📈 Parsed values - viewCount:', viewCount, 'durationSeconds:', durationSeconds);
-        log('⚙️ Config thresholds - MIN_VIEWS:', CONFIG.MIN_VIEWS, 'MIN_DURATION_SECONDS:', CONFIG.MIN_DURATION_SECONDS);
-
-        // Check filters
-        const viewsLow = viewsText && viewCount > 0 && viewCount < CONFIG.MIN_VIEWS;
-        const durationShort = durationText && durationSeconds > 0 && durationSeconds < CONFIG.MIN_DURATION_SECONDS;
-
-        if (viewsLow || durationShort) {
-            const reason = [];
-            if (viewsLow) reason.push(`${viewCount} views < ${CONFIG.MIN_VIEWS}`);
-            if (durationShort) reason.push(`${durationSeconds}s < ${CONFIG.MIN_DURATION_SECONDS}s`);
-            log(`🚫 FILTERING: ${reason.join(' AND ')}`);
-            return true;
-        }
-
-        log('✅ Video passes filters');
-        return false;
-    };
     /**
      * Check if video should be filtered
      */
@@ -1697,6 +1662,8 @@
 
             .settings-footer button:active {
                 transform: scale(0.98);
+            }
+
             .list-container {
                 display: flex;
                 flex-direction: column;
@@ -1742,7 +1709,6 @@
 
             .btn-remove-item:hover {
                 background: #dd0000;
-            }
             }
 
             .btn-reset {
@@ -1848,8 +1814,7 @@
             return;
         }
 
-        log('Initializing YouTube Filter Pro 3.2.1...');
-    log('Initializing YouTube Filter Pro 3.3.0...');
+        log('Initializing YouTube Filter Pro 3.3.1...');
 
         // Inject styles immediately
         injectStyles();
